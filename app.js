@@ -2203,7 +2203,7 @@ function authModal(mode = 'login') {
     <h3>${isLogin ? '로그인' : '계정 만들기'}</h3>
     <div class="field"><label>아이디</label>
       <input type="text" id="lm-id" placeholder="영문 소문자·숫자 3~20자" autocomplete="username" autocapitalize="none" spellcheck="false">
-      ${isLogin ? '' : '<div class="hint">예: minju00 — 이메일 필요 없어요! 아이디만 중복이 아니면 바로 시작돼요.</div>'}
+      ${isLogin ? '' : '<div class="hint">이메일 필요 없어요! 아이디만 중복이 아니면 바로 시작돼요.</div>'}
     </div>
     <div class="field"><label>비밀번호</label><input type="password" id="lm-pw" placeholder="6자 이상" autocomplete="${isLogin ? 'current-password' : 'new-password'}"></div>
     ${isLogin ? '' : '<div class="field"><label>비밀번호 확인</label><input type="password" id="lm-pw2" placeholder="한 번 더 입력"></div>'}

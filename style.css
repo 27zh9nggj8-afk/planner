@@ -319,18 +319,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .field input[type="text"], .field input[type="number"],
 .field input[type="date"], .field input[type="time"],
+.field input[type="email"], .field input[type="password"],
 .field select, .field textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 15px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: var(--card);
+  border-radius: 14px;
+  background: var(--bg);
   font-size: 15px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
+
+.field input:focus, .field select:focus, .field textarea:focus { background: var(--card); }
 
 .field input:focus, .field select:focus, .field textarea:focus {
   border-color: var(--accent);
