@@ -2609,11 +2609,85 @@ function viewNotif() {
       <div class="hint" style="margin-top:8px">기간 일정은 시작 전날·당일과 마감일 당일에 알려 드려요.</div>
     </div>
 
+    <div class="section-title">서버 푸시 알림 💎 <span style="font-weight:400">— 앱이 꺼져 있어도 매일 아침 8:50에 그날 일정 알림</span></div>
+    <div class="card" id="push-sec" style="font-size:13.5px;color:var(--text-2)">확인 중…</div>
+
     <button class="btn full" data-test-notif style="margin-top:14px">${ICONS.bell} 알림 테스트</button>`;
+}
+
+/* --- 서버 푸시 구독 --- */
+
+function urlB64ToU8(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function renderPushSec() {
+  const el = $('#push-sec');
+  if (!el) return;
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && location.protocol.startsWith('http');
+  if (!supported) {
+    el.innerHTML = '이 브라우저에서는 서버 푸시를 지원하지 않아요. <b>아이폰은 홈 화면에 추가한 앱에서만</b> 지원돼요 (iOS 16.4+).';
+    return;
+  }
+  if (!cloudConfigured()) { el.innerHTML = '서버 연결 후 사용할 수 있어요.'; return; }
+  await ensureCloud();
+  if (!sbUser) {
+    el.innerHTML = `로그인하면 사용할 수 있어요. <button class="btn sm" id="push-login" style="margin-left:6px">로그인</button>`;
+    const b = $('#push-login'); if (b) b.onclick = () => authModal('login');
+    return;
+  }
+  if (!sbPremium) {
+    el.innerHTML = `기기가 꺼져 있어도 아침마다 그날의 시험·과제·마감을 알려드리는 <b>프리미엄</b> 기능이에요. <button class="btn sm" id="push-prem" style="margin-left:6px">프리미엄 보기</button>`;
+    const b = $('#push-prem'); if (b) b.onclick = () => go('more', 'premium');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      el.innerHTML = `<span style="color:var(--ok);font-weight:600">✓ 켜져 있어요</span> — 매일 아침 8:50, 그날 시작·마감 일정을 보내드려요. <button class="btn sm" id="push-off" style="margin-left:6px">끄기</button>`;
+      const b = $('#push-off'); if (b) b.onclick = async () => {
+        try { await sb.from('push_subs').delete().eq('endpoint', sub.endpoint); } catch (e) {}
+        await sub.unsubscribe();
+        renderPushSec(); toast('서버 푸시를 껐어요');
+      };
+    } else {
+      el.innerHTML = `<button class="btn primary sm" id="push-on">서버 푸시 켜기</button> <span style="margin-left:6px">이 기기로 매일 아침 일정 알림을 받아요.</span>`;
+      const b = $('#push-on'); if (b) b.onclick = enablePush;
+    }
+  } catch (e) {
+    el.innerHTML = '푸시 상태를 확인할 수 없어요 — 새로고침 후 다시 시도해 주세요.';
+  }
+}
+
+async function enablePush() {
+  const ok = await ensurePermission(true);
+  if (!ok) { toast('먼저 브라우저 알림을 허용해 주세요'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToU8(CONFIG.VAPID_PUBLIC_KEY)
+    });
+    const j = sub.toJSON();
+    const { error } = await sb.from('push_subs').upsert({
+      endpoint: sub.endpoint, user_id: sbUser.id, p256dh: j.keys.p256dh, auth: j.keys.auth
+    });
+    if (error) throw error;
+    renderPushSec();
+    toast('완료! 매일 아침 8:50에 그날 일정을 알려드릴게요 🔔');
+  } catch (e) {
+    console.warn(e);
+    toast('푸시 등록에 실패했어요 — 잠시 후 다시 시도해 주세요');
+  }
 }
 
 function bindNotif() {
   bindBack();
+  renderPushSec();
   const set = (k, v) => { S.notif[k] = v; save(); render(); };
   const map = {
     'enabled-on': () => { set('enabled', true); ensurePermission(); },

@@ -40,10 +40,12 @@
 const CONFIG = {
   PREMIUM: {
     price: 9900,
-    bank: '',      // 예: '카카오뱅크'
-    account: '',   // 예: '3333-01-1234567'
-    holder: ''     // 예: '홍길동'
+    bank: '토스뱅크',
+    account: '1000-5362-9733',
+    holder: '최수인'
   },
+  VAPID_PUBLIC_KEY: 'BL6fOpO05WSVlZ3O2rAr8a3vvUTovl6N_vvd26XIeJfMciEf9JttGXdp1sEEv8U0RFaSAEM95qwWnhL9tRYtvf0',  // 서버 푸시 알림용 공개키
+
   SUPABASE_URL: 'https://rchopnosohtvbyrjfyin.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjaG9wbm9zb2h0dmJ5cmpmeWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzI3NTksImV4cCI6MjA5ODc0ODc1OX0.YnlZk5R4S9oNKD4XekkmJwHz84dS0cOGPQCYPDqYEhc'
 };
