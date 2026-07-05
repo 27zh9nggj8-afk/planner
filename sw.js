@@ -1,10 +1,10 @@
 /* =====================================================
-   학점은행 플래너 — 서비스 워커
+   학점플래너 — 서비스 워커
    · 앱 셸 캐시 (오프라인/홈 화면 설치 지원)
    · 알림 클릭 시 앱 열기
    ===================================================== */
 
-const CACHE = 'cbp-shell-v2';
+const CACHE = 'cbp-shell-v3';
 const SHELL = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const SHELL = [
   './app.js',
   './config.js',
   './certs-db.js',
+  './fonts.css',
+  './fonts/SUIT-Variable.woff2',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -57,7 +59,7 @@ self.addEventListener('notificationclick', e => {
 
 /* 푸시 서버 연동 시(향후) 백그라운드 푸시 수신 */
 self.addEventListener('push', e => {
-  let data = { title: '학점은행 플래너', body: '' };
+  let data = { title: '학점플래너', body: '' };
   try { data = Object.assign(data, e.data.json()); } catch (err) { /* 무시 */ }
   e.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: './icon-192.png', badge: './icon-192.png' }));
 });

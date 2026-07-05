@@ -1,0 +1,24 @@
+/* =====================================================
+   학점플래너 — 폰트 정의 (앞으로 폰트는 이 파일에서만 관리)
+
+   현재 폰트: SUIT (https://sun.fo/suit/) — SIL Open Font License
+   가변 폰트 1개 파일로 100~900 굵기 전부 커버.
+
+   폰트를 바꾸고 싶을 때:
+   1. fonts/ 폴더에 새 woff2 파일 넣기
+   2. 아래 @font-face의 font-family 이름과 src 경로만 수정
+   3. --font-main 변수는 그대로 두면 앱 전체에 자동 적용
+   ===================================================== */
+
+@font-face {
+  font-family: 'SUIT Variable';
+  font-weight: 100 900;
+  font-style: normal;
+  src: url('fonts/SUIT-Variable.woff2') format('woff2-variations');
+  font-display: swap;
+}
+
+:root {
+  --font-main: 'SUIT Variable', -apple-system, BlinkMacSystemFont,
+    'Apple SD Gothic Neo', 'Segoe UI', 'Malgun Gothic', sans-serif;
+}

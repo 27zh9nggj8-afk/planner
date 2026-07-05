@@ -27,7 +27,23 @@
       로컬 테스트:  python3 -m http.server 8000  →  http://localhost:8000
    ===================================================== */
 
+/* ---------- 프리미엄(1회 결제) 판매 설정 ----------
+   계좌 정보를 채우면 앱의 '프리미엄' 화면에 입금 안내가 표시됩니다.
+
+   [입금 확인 후 프리미엄 켜주는 방법]
+   Supabase → SQL Editor에서 (아이디 부분만 바꿔서) 실행:
+     insert into public.premium_users (user_id)
+     select id from auth.users where email = '아이디@cbp-user.app'
+     on conflict do nothing;
+   사용자는 앱을 새로고침하면 바로 프리미엄이 켜져요. */
+
 const CONFIG = {
+  PREMIUM: {
+    price: 9900,
+    bank: '',      // 예: '카카오뱅크'
+    account: '',   // 예: '3333-01-1234567'
+    holder: ''     // 예: '홍길동'
+  },
   SUPABASE_URL: 'https://rchopnosohtvbyrjfyin.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjaG9wbm9zb2h0dmJ5cmpmeWluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzI3NTksImV4cCI6MjA5ODc0ODc1OX0.YnlZk5R4S9oNKD4XekkmJwHz84dS0cOGPQCYPDqYEhc'
 };
