@@ -636,7 +636,7 @@ function obAuth() {
     </button>
     <button class="opt-card intro-card" data-auth-signup>
       <div class="t">✨ 처음이에요</div>
-      <div class="d">이메일로 가입하고 시작해요. 만드는 계획이 자동으로 안전하게 저장돼요.</div>
+      <div class="d">아이디·비밀번호만 만들면 바로 시작! 이메일 인증 없이, 만드는 계획이 자동으로 저장돼요.</div>
     </button>
     <button class="btn full" data-auth-skip style="margin-top:6px;border:0;color:var(--text-3)">로그인 없이 시작하기 (이 기기에만 저장)</button>`;
 }
@@ -2031,7 +2031,7 @@ function renderMore() {
 
 function viewMoreHome() {
   const acctSub = !cloudConfigured() ? '서버 연결 설정하고 기기 간 저장하기'
-    : (sbUser ? `${sbUser.email} · 자동 저장 중` : '로그인하고 어디서나 이어서 하기');
+    : (sbUser ? `${emailToId(sbUser.email)}님 · 자동 저장 중` : '로그인하고 어디서나 이어서 하기');
   return `
     <div class="page-head">
       <div class="page-title">더보기</div>
@@ -2160,6 +2160,35 @@ function cloudConfigured() {
   return typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY;
 }
 
+/* 아이디 기반 로그인: 내부적으로는 '아이디@cbp-user.app' 형태로 저장
+   (Supabase 인증이 이메일 형식을 요구하기 때문 — 사용자는 아이디만 보면 됨) */
+const ID_DOMAIN = 'cbp-user.app';
+const ID_RE = /^[a-z0-9_]{3,20}$/;
+
+function idToEmail(v) {
+  v = v.trim();
+  return v.includes('@') ? v : `${v.toLowerCase()}@${ID_DOMAIN}`;
+}
+
+function emailToId(email) {
+  if (!email) return '';
+  return email.endsWith('@' + ID_DOMAIN) ? email.slice(0, -(ID_DOMAIN.length + 1)) : email;
+}
+
+/* Supabase 오류를 친절한 한국어로 */
+function authErrorMsg(error, isLogin) {
+  const m = (error.message || '').toLowerCase();
+  if (m.includes('already registered') || error.code === 'user_already_exists')
+    return '이미 사용 중인 아이디예요 — 다른 아이디를 골라주세요';
+  if (m.includes('invalid login credentials'))
+    return '아이디 또는 비밀번호가 맞지 않아요';
+  if (m.includes('rate limit'))
+    return '요청이 너무 잦아요 — 잠시 후 다시 시도해 주세요';
+  if (m.includes('at least 6'))
+    return '비밀번호는 6자 이상이어야 해요';
+  return (isLogin ? '로그인 실패: ' : '회원가입 실패: ') + error.message;
+}
+
 /* 클라우드 초기화를 한 번만, 어디서든 기다릴 수 있게 */
 function ensureCloud() {
   if (!cloudInitPromise) cloudInitPromise = initCloud();
@@ -2171,43 +2200,55 @@ function ensureCloud() {
 function authModal(mode = 'login') {
   const isLogin = mode === 'login';
   openModal(`
-    <h3>${isLogin ? '로그인' : '회원가입'}</h3>
-    <div class="field"><label>이메일</label><input type="email" id="lm-email" placeholder="you@example.com" autocomplete="email"></div>
+    <h3>${isLogin ? '로그인' : '계정 만들기'}</h3>
+    <div class="field"><label>아이디</label>
+      <input type="text" id="lm-id" placeholder="영문 소문자·숫자 3~20자" autocomplete="username" autocapitalize="none" spellcheck="false">
+      ${isLogin ? '' : '<div class="hint">예: minju00 — 이메일 필요 없어요! 아이디만 중복이 아니면 바로 시작돼요.</div>'}
+    </div>
     <div class="field"><label>비밀번호</label><input type="password" id="lm-pw" placeholder="6자 이상" autocomplete="${isLogin ? 'current-password' : 'new-password'}"></div>
+    ${isLogin ? '' : '<div class="field"><label>비밀번호 확인</label><input type="password" id="lm-pw2" placeholder="한 번 더 입력"></div>'}
     <div class="modal-actions">
       <button class="btn" data-close>취소</button>
       <button class="btn primary" id="lm-go">${isLogin ? '로그인' : '가입하고 시작하기'}</button>
     </div>
-    <button class="btn full" id="lm-switch" style="border:0;color:var(--text-2);margin-top:6px">${isLogin ? '계정이 없어요 → 회원가입' : '이미 계정이 있어요 → 로그인'}</button>
+    <button class="btn full" id="lm-switch" style="border:0;color:var(--text-2);margin-top:6px">${isLogin ? '계정이 없어요 → 계정 만들기' : '이미 계정이 있어요 → 로그인'}</button>
     <div class="hint" style="margin-top:6px">로그인은 <b>한 번만</b> 하면 이 기기에 계속 유지돼요.</div>`);
 
   $('#lm-switch').onclick = () => authModal(isLogin ? 'signup' : 'login');
 
   $('#lm-go').onclick = async () => {
-    const email = $('#lm-email').value.trim();
+    const rawId = $('#lm-id').value.trim();
     const password = $('#lm-pw').value;
-    if (!email || !password) { toast('이메일과 비밀번호를 입력해 주세요'); return; }
-    if (!isLogin && password.length < 6) { toast('비밀번호는 6자 이상이어야 해요'); return; }
+    if (!rawId || !password) { toast('아이디와 비밀번호를 입력해 주세요'); return; }
+    if (!rawId.includes('@') && !ID_RE.test(rawId.toLowerCase())) {
+      toast('아이디는 영문 소문자·숫자·_ 로 3~20자예요'); return;
+    }
+    if (!isLogin) {
+      if (password.length < 6) { toast('비밀번호는 6자 이상이어야 해요'); return; }
+      if (password !== $('#lm-pw2').value) { toast('비밀번호 확인이 일치하지 않아요'); return; }
+    }
     await ensureCloud();
     if (!sb) { toast('서버에 연결할 수 없어요 — 인터넷 연결을 확인해 주세요'); return; }
+    const email = idToEmail(rawId);
 
     if (isLogin) {
       const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) { toast('로그인 실패: ' + error.message); return; }
+      if (error) { toast(authErrorMsg(error, true)); return; }
       closeModal();
       await cloudPull(false);
       if (S.profile.done) { render(); toast('돌아오신 걸 환영해요! 계획을 불러왔어요 🎉'); }
       else { ob.phase = 'intro'; renderOnboarding(); toast('로그인했어요! 이제 계획을 만들어 볼까요?'); }
     } else {
       const { data, error } = await sb.auth.signUp({ email, password });
-      if (error) { toast('회원가입 실패: ' + error.message); return; }
-      closeModal();
+      if (error) { toast(authErrorMsg(error, false)); return; }
       if (data.session) {
+        closeModal();
         if (!S.profile.done) { ob.phase = 'intro'; renderOnboarding(); }
         else render();
-        toast('가입 완료! 만드는 계획이 자동 저장돼요 🎉');
+        toast(`${emailToId(email)}님, 환영해요! 만드는 계획이 자동 저장돼요 🎉`);
       } else {
-        toast('가입 완료! 메일함의 인증 링크를 누른 뒤 로그인해 주세요');
+        // 서버에 이메일 인증이 켜져 있으면 아이디 방식이 동작하지 않음 (관리자 설정 필요)
+        toast('서버 설정 문제로 가입이 완료되지 않았어요 — Supabase에서 Confirm email을 꺼주세요');
       }
     }
   };
@@ -2306,20 +2347,15 @@ function viewAccount() {
   if (!sbUser) {
     return `
       ${backBtn('로그인 · 클라우드 저장')}
-      <div class="banner info">${ICONS.info}<div>로그인하면 데이터가 클라우드에 <b>자동 저장</b>되고, 다른 기기에서 로그인해 이어서 할 수 있어요.</div></div>
-      <div class="card">
-        <div class="field"><label>이메일</label><input type="email" id="ac-email" placeholder="you@example.com" autocomplete="email"></div>
-        <div class="field"><label>비밀번호</label><input type="password" id="ac-pw" placeholder="6자 이상" autocomplete="current-password"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" id="ac-signup" style="flex:1">회원가입</button>
-          <button class="btn primary" id="ac-login" style="flex:1">로그인</button>
-        </div>
-        <div class="hint" style="margin-top:10px">비밀번호를 잊으면 Supabase의 비밀번호 재설정 메일을 이용할 수 있어요.</div>
+      <div class="banner info">${ICONS.info}<div>로그인하면 데이터가 클라우드에 <b>자동 저장</b>되고, 다른 기기에서 로그인해 이어서 할 수 있어요. 이메일 인증 없이 <b>아이디·비밀번호</b>만으로 시작해요.</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="ac-signup" style="flex:1">계정 만들기</button>
+        <button class="btn primary" id="ac-login" style="flex:1">로그인</button>
       </div>`;
   }
   return `
     ${backBtn('로그인 · 클라우드 저장')}
-    <div class="banner ok">${ICONS.check}<div><b>${esc(sbUser.email)}</b>로 로그인됨 — 변경 사항이 자동으로 클라우드에 저장돼요.${syncInfo ? `<br><span style="opacity:.8">${esc(syncInfo)}</span>` : ''}</div></div>
+    <div class="banner ok">${ICONS.check}<div><b>${esc(emailToId(sbUser.email))}</b>님으로 로그인됨 — 변경 사항이 자동으로 클라우드에 저장돼요.${syncInfo ? `<br><span style="opacity:.8">${esc(syncInfo)}</span>` : ''}</div></div>
     <button class="link-row" id="ac-push">${ICONS.upload}<span class="grow">지금 클라우드에 저장<span class="sub">이 기기의 데이터를 업로드</span></span></button>
     <button class="link-row" id="ac-pull">${ICONS.download}<span class="grow">클라우드에서 불러오기<span class="sub">이 기기의 데이터를 덮어씁니다</span></span></button>
     <button class="link-row" id="ac-logout" style="color:var(--danger)">${ICONS.person}<span class="grow">로그아웃<span class="sub">이 기기의 데이터는 그대로 남아요</span></span></button>`;
@@ -2328,27 +2364,9 @@ function viewAccount() {
 function bindAccount() {
   bindBack();
   const login = $('#ac-login');
-  if (login) login.onclick = async () => {
-    const email = $('#ac-email').value.trim();
-    const password = $('#ac-pw').value;
-    if (!email || !password) { toast('이메일과 비밀번호를 입력해 주세요'); return; }
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { toast('로그인 실패: ' + error.message); return; }
-    toast('로그인되었습니다');
-    await cloudPull(false);
-    render();
-  };
+  if (login) login.onclick = () => authModal('login');
   const signup = $('#ac-signup');
-  if (signup) signup.onclick = async () => {
-    const email = $('#ac-email').value.trim();
-    const password = $('#ac-pw').value;
-    if (!email || !password) { toast('이메일과 비밀번호를 입력해 주세요'); return; }
-    if (password.length < 6) { toast('비밀번호는 6자 이상이어야 해요'); return; }
-    const { data, error } = await sb.auth.signUp({ email, password });
-    if (error) { toast('회원가입 실패: ' + error.message); return; }
-    if (data.session) { toast('가입 완료! 자동으로 로그인되었어요'); await cloudPush(); render(); }
-    else toast('가입 완료! 이메일 인증 후 로그인해 주세요');
-  };
+  if (signup) signup.onclick = () => authModal('signup');
   const push = $('#ac-push');
   if (push) push.onclick = async () => { await cloudPush(); render(); toast('클라우드에 저장했습니다'); };
   const pull = $('#ac-pull');
