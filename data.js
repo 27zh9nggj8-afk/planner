@@ -125,7 +125,7 @@ const DATA = {
      인정학점·전공 연계는 「제28차 자격 학점인정 기준」 고시 기준표 기준.
      majors: 해당 자격이 전공학점으로 연계되는 전공(이 앱의 전공 목록 기준, 학사·전문학사 포함)
      ※ 전체 816개 자격의 정확한 기준은 학점은행 홈페이지 '자격 검색'에서 확인 */
-  certs: [
+  certs: (typeof CERTS_DB !== 'undefined') ? CERTS_DB : [
     // 정보/통신
     { name: '정보처리기사', credits: 20, grade: '기사', majors: ['컴퓨터공학', '정보통신공학', '멀티미디어학', '정보처리', '정보통신'] },
     { name: '정보처리산업기사', credits: 16, grade: '산업기사', majors: ['컴퓨터공학', '정보통신공학', '멀티미디어학', '정보처리', '정보통신'] },
@@ -144,10 +144,10 @@ const DATA = {
     { name: '멀티미디어콘텐츠제작전문가', credits: 18, grade: '국가기술', majors: ['멀티미디어학'] },
     // 복지/상담/심리
     { name: '사회복지사 1급', credits: 20, grade: '국가전문', majors: ['사회복지학', '사회복지'] },
-    { name: '사회조사분석사 2급', credits: 18, grade: '국가기술', majors: ['사회복지학'] },
-    { name: '사회조사분석사 1급', credits: 25, grade: '국가기술', majors: ['사회복지학'] },
-    { name: '직업상담사 2급', credits: 20, grade: '국가기술', majors: ['심리학', '사회복지학', '사회복지'] },
-    { name: '직업상담사 1급', credits: 30, grade: '국가기술', majors: ['심리학', '사회복지학', '사회복지'] },
+    { name: '사회조사분석사 2급', credits: 18, grade: '국가기술', majors: [] },
+    { name: '사회조사분석사 1급', credits: 25, grade: '국가기술', majors: [] },
+    { name: '직업상담사 2급', credits: 20, grade: '국가기술', majors: ['심리학'] },
+    { name: '직업상담사 1급', credits: 30, grade: '국가기술', majors: ['심리학'] },
     { name: '임상심리사 2급', credits: 20, grade: '국가기술', majors: ['심리학'] },
     { name: '청소년상담사 3급', credits: 20, grade: '국가전문', majors: ['심리학'] },
     // 경영/회계/사무

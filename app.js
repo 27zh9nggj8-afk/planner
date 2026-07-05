@@ -98,6 +98,7 @@ const defaultState = () => ({
     dayBefore: true,
     fired: {}
   },
+  tuition: 80000,        // 과목(3학점)당 수강료 가정 — 예상 비용 계산용, 사용자가 조정
   ui: { tab: 'home', sub: null, filter: 'all', schedView: 'list', calYm: null, calSel: null }
 });
 
@@ -626,7 +627,7 @@ function renderOnboarding() {
 function obAuth() {
   return `
     <div class="intro-hero">
-      <div class="intro-logo">🎓</div>
+      <img src="icon-192.png" class="intro-logo-img" alt="학점은행 플래너">
       <h1 style="text-align:center">학점은행 플래너</h1>
       <p class="sub" style="text-align:center">혼자서도 체계적인 학위 계획.<br>계정으로 시작하면 어떤 기기에서든 이어서 할 수 있어요.</p>
     </div>
@@ -645,7 +646,7 @@ function obAuth() {
 function obIntro() {
   return `
     <div class="intro-hero">
-      <div class="intro-logo">🎓</div>
+      <img src="icon-192.png" class="intro-logo-img" alt="">
       <h1 style="text-align:center">반가워요!<br>학점은행 플래너예요</h1>
       <p class="sub" style="text-align:center">학점은행제 학위 취득, 혼자서도 체계적으로 할 수 있어요.<br>어떻게 시작할까요?</p>
     </div>
@@ -653,11 +654,63 @@ function obIntro() {
       <div class="t">🌱 학은제, 처음이에요</div>
       <div class="d">차근차근 알려주세요 — 학점은행제가 뭔지, 학위 종류, 학점 쌓는 법부터 6개 스텝으로 쉽게 설명한 뒤 계획을 세워요.</div>
     </button>
+    <button class="opt-card intro-card" data-quick-preview style="border-style:dashed">
+      <div class="t">⚡ 30초 미리보기</div>
+      <div class="d">계획을 만들기 전에, 몇 학점이 남고 언제 졸업할 수 있는지 먼저 확인해 보세요.</div>
+    </button>
     <button class="opt-card intro-card" data-route="direct">
       <div class="t">🚀 어느 정도 알고 있어요</div>
       <div class="d">바로 계획을 세우고 싶어요 — 내 정보를 입력하고 곧장 로드맵을 만들어요. 이미 진행 중이어도 이어서 계획할 수 있어요.</div>
     </button>
     <div class="footnote" style="text-align:center">모든 단계에서 ${ICONS.help.replace('<svg', '<svg style="width:13px;height:13px;vertical-align:-2px"')} 버튼을 누르면 자세한 설명을 볼 수 있어요.</div>`;
+}
+
+/* --- 30초 미리보기: 3문항 → 예상 졸업 시점·필요 학점·비용 --- */
+function quickPreviewModal() {
+  openModal(`
+    <h3>⚡ 30초 미리보기</h3>
+    <div class="field"><label>목표 학위</label>
+      <div class="seg" id="qp-deg">
+        ${Object.entries(DATA.degrees).map(([k, d], i) => `<button data-deg="${k}" class="${i === 0 ? 'active' : ''}">${d.short}</button>`).join('')}
+      </div>
+    </div>
+    <div class="field"><label>이미 가진 학점 (대략, 없으면 0)</label>
+      <input type="number" id="qp-earned" min="0" max="200" value="0">
+      <div class="hint">전적 대학 학점, 자격증 등 인정받았거나 받을 학점을 대략이면 돼요.</div>
+    </div>
+    <button class="btn primary full" id="qp-calc">예상 결과 보기</button>
+    <div id="qp-result"></div>`);
+
+  let deg = 'bachelor';
+  $$('#qp-deg button').forEach(b => b.onclick = () => {
+    deg = b.dataset.deg;
+    $$('#qp-deg button').forEach(x => x.classList.toggle('active', x === b));
+  });
+  $('#qp-calc').onclick = () => {
+    const req = DATA.degrees[deg];
+    const earned = Math.max(0, Number($('#qp-earned').value) || 0);
+    const need = Math.max(0, req.total - earned);
+    const today = todayStr();
+    const opts = conferralOpts(10);
+    const byCourse = opts.find(g => capacity(termCountBetween(today, g.studyEnd)) >= need);
+    const byMix = opts.find(g => capacity(termCountBetween(today, g.studyEnd)) + 45 >= need);
+    const courses = Math.ceil(need / 3);
+    const tuition = courses * (S.tuition || 80000);
+    const fees = need * DATA.limits.fees.perCredit + DATA.limits.fees.register;
+    $('#qp-result').innerHTML = `
+      <div class="divider"></div>
+      <div class="stat-row"><span class="label">남은 학점</span><span class="val"><b>${need}</b>학점 (과목 약 ${courses}개)</span></div>
+      <div class="stat-row"><span class="label">수업만으로</span><span class="val"><b>${byCourse ? byCourse.label : '4년 이상'}</b> 수여 가능</span></div>
+      <div class="stat-row"><span class="label">자격증·독학사 병행 시</span><span class="val"><b>${byMix ? byMix.label : '계산 불가'}</b>까지 단축 가능</span></div>
+      <div class="stat-row"><span class="label">예상 비용(대략)</span><span class="val"><b>${(tuition + fees).toLocaleString()}원</b></span></div>
+      <div class="hint">수강료를 과목당 ${(S.tuition || 80000).toLocaleString()}원으로 가정한 값이에요 (기관마다 달라요). 행정 수수료(학점당 1,000원 + 등록 4,000원) 포함.</div>
+      <button class="btn primary full" id="qp-go" style="margin-top:12px">이대로 정확한 계획 만들기 →</button>`;
+    $('#qp-go').onclick = () => {
+      ob.degree = deg;
+      ob.phase = 'plan'; ob.step = 0;
+      closeModal(); renderOnboarding();
+    };
+  };
 }
 
 /* --- 초보자 가이드 (스텝 1~6) --- */
@@ -712,6 +765,7 @@ function obStep2() {
       <label>전공명 직접 입력</label>
       <input type="text" id="ob-major-custom" value="${esc(!majors.includes(ob.major) ? ob.major : '')}" placeholder="예: 문화예술경영학">
     </div>
+    <div class="hint" style="margin-top:-6px;margin-bottom:14px">전공필수 과목 예시는 인기 전공 일부만 제공돼요. 없는 전공은 학점은행 홈페이지의 표준교육과정에서 확인할 수 있고, 자격증 전공 연계(제28차 고시 ${DATA.certs.length}개 수록)는 모든 전공에서 자동으로 찾아드려요.</div>
     <div style="margin-top:28px;display:flex;gap:8px">
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-next>다음</button>
@@ -776,7 +830,9 @@ function obStep4() {
 
 function obStep5() {
   const isBachelor = ob.degree === 'bachelor' || ob.degree === 'bachelor2';
-  const related = DATA.certs.filter(c => c.majors.includes(ob.major));
+  // 현실적으로 도전할 만한 자격 위주 추천 (기술사·전문직 등 초고난도는 검색으로)
+  const relatedAll = DATA.certs.filter(c => c.majors.includes(ob.major));
+  const related = relatedAll.filter(c => c.credits <= 30).sort((a, b) => b.credits - a.credits).slice(0, 12);
   const limit = DATA.degrees[ob.degree].certLimit;
   const slotsLeft = Math.max(0, limit - ob.certsUsed - ob.plans.filter(p => p.kind === 'cert').length);
   return `
@@ -871,7 +927,8 @@ function obStep6() {
     <div style="margin-top:28px;display:flex;gap:8px">
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-finish>로드맵 만들기</button>
-    </div>`;
+    </div>
+    <div class="footnote">본 앱의 계산은 공식 고시·공개 자료 기반의 참고용 계획이에요. 학점인정 여부의 최종 확인은 국가평생교육진흥원(www.cb.or.kr · ☎ 1600-0400)에서 해주세요.</div>`;
 }
 
 function bindOnboarding() {
@@ -884,6 +941,9 @@ function bindOnboarding() {
   if (authSignup) authSignup.onclick = () => authModal('signup');
   const authSkip = $('[data-auth-skip]');
   if (authSkip) authSkip.onclick = () => { ob.phase = 'intro'; renderOnboarding(); };
+
+  const qp = $('[data-quick-preview]');
+  if (qp) qp.onclick = () => quickPreviewModal();
 
   // 첫 화면 분기: 초보자 가이드 / 바로 계획
   $$('[data-route]').forEach(b => b.onclick = () => {
@@ -1368,6 +1428,25 @@ function viewRoadmap() {
       <div class="footnote" style="margin-top:10px">예상 잔여 수수료: 학점인정 신청 약 ${(rm.needs.total * DATA.limits.fees.perCredit).toLocaleString()}원(남은 ${rm.needs.total}학점 × 1,000원) + 학습자 등록 4,000원(최초 1회, 이미 등록했다면 제외) + 교육기관 수강료 별도</div>
     </div>
 
+    <div class="card" style="margin-top:10px">
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:10px">예상 총비용 ${helpBtn('studyEnd') ? '' : ''}<span style="font-weight:400;color:var(--text-3)">— 내가 정한 수강료 기준</span></div>
+      ${(() => {
+        const courses = Math.ceil(rm.courseNeed / 3);
+        const per = S.tuition || 80000;
+        const tuitionCost = courses * per;
+        const feeCost = rm.needs.total * DATA.limits.fees.perCredit;
+        return `
+        <div class="stat-row"><span class="label">수강료</span><span class="val">과목 ${courses}개 × <b>${per.toLocaleString()}</b>원 = <b>${tuitionCost.toLocaleString()}</b>원</span></div>
+        <div class="stat-row"><span class="label">학점인정 수수료</span><span class="val">${rm.needs.total}학점 × 1,000원 = <b>${feeCost.toLocaleString()}</b>원</span></div>
+        <div class="stat-row"><span class="label">학습자 등록(최초 1회)</span><span class="val"><b>4,000</b>원</span></div>
+        <div class="divider"></div>
+        <div class="stat-row"><span class="label" style="font-size:14.5px">합계 (대략)</span><span class="val" style="font-size:15px"><b>${(tuitionCost + feeCost + 4000).toLocaleString()}원</b></span></div>
+        <div class="field" style="margin:12px 0 0"><label>과목(3학점)당 수강료 가정 — 기관마다 달라요</label>
+          <input type="number" id="rm-tuition" step="5000" min="0" value="${per}"></div>
+        <div class="hint">교육기관 수강료는 과목당 몇만~십몇만 원까지 다양해요. 견적을 받아본 뒤 이 값을 바꾸면 전체 계획 비용이 갱신돼요. 자격증 응시료·교재비는 별도.</div>`;
+      })()}
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn" data-regen>${ICONS.refresh} 다시 생성</button>
       <button class="btn" data-edit-goal>${ICONS.edit} 목표 수정</button>
@@ -1435,6 +1514,8 @@ function bindRoadmap() {
     const gi = goalInfo();
     addAdminSchedule(`학위신청 (${gi.label} 수여)`, gi.applyStart, gi.applyEnd, '학점은행 홈페이지에서 온라인 신청만 가능 (방문·우편·팩스 불가)');
   };
+  const tu = $('#rm-tuition');
+  if (tu) tu.onchange = () => { S.tuition = Math.max(0, Number(tu.value) || 0); save(); render(); };
   const ap = $('[data-add-plan]');
   if (ap) ap.onclick = () => planModal();
   $$('[data-adopt-cert]').forEach(el => el.onclick = () => {
@@ -2066,8 +2147,11 @@ function bindBack() {
 
 function viewCerts() {
   const slot = certSlotInfo();
-  const related = DATA.certs.filter(c => c.majors.includes(S.profile.major));
-  const others = DATA.certs.filter(c => !c.majors.includes(S.profile.major));
+  const q = (S.ui.certQ || '').trim();
+  const match = c => !q || c.name.toLowerCase().includes(q.toLowerCase());
+  const related = DATA.certs.filter(c => c.majors.includes(S.profile.major) && match(c));
+  const othersAll = DATA.certs.filter(c => !c.majors.includes(S.profile.major) && match(c));
+  const others = othersAll.slice(0, q ? 60 : 20);
 
   const certRow = (c, isMajor) => {
     const added = S.plans.some(p => p.name === c.name);
@@ -2099,8 +2183,12 @@ function viewCerts() {
       <div class="section-title">전공 관련</div>
       <div class="card empty"><div>‘${esc(S.profile.major)}’ 전공과 자동 매칭되는 자격증 정보가 없습니다.<br>학점은행 홈페이지의 ‘자격 검색’에서 확인해 보세요.</div></div>`}
 
-    <div class="section-title">그 외 자격증 — 일반선택 학점으로 인정 (1개까지)</div>
-    ${others.map(c => certRow(c, false)).join('')}
+    <div class="section-title">전체 자격 검색 — 제28차 고시 ${DATA.certs.length}개 수록</div>
+    <div class="field" style="margin-bottom:10px">
+      <input type="text" id="cert-q" value="${esc(q)}" placeholder="자격증 이름으로 검색 (예: 조리, 전기, 상담)">
+    </div>
+    ${others.map(c => certRow(c, c.majors.includes(S.profile.major))).join('')}
+    ${othersAll.length > others.length ? `<div class="footnote">${othersAll.length - others.length}개 더 있어요 — 검색어를 입력해 좁혀 보세요.</div>` : ''}
 
     <div class="footnote">국가기술자격 등급별 인정 학점: 기술사 45 · 기능장 30 · 기사 20 · 산업기사 16학점 (기능사는 인정 불가).
     전공 연계 자격은 전공필수 학점으로, 연계 없는 자격은 일반선택 학점으로 <b>1개까지만</b> 인정되며, 동일 직무 분야 자격은 1개만, 동일 자격은 전체 학위과정에서 한 번만 인정됩니다.
@@ -2110,6 +2198,12 @@ function viewCerts() {
 function bindCerts() {
   bindBack();
   bindPlanItems();
+  const cq = $('#cert-q');
+  if (cq) {
+    cq.onchange = () => { S.ui.certQ = cq.value; save(); render();
+      const el = $('#cert-q'); if (el) { el.focus(); } };
+    cq.onkeydown = e => { if (e.key === 'Enter') cq.onchange(); };
+  }
   const ap = $('[data-add-plan]');
   if (ap) ap.onclick = () => planModal(null, { target: 'major' });
   $$('[data-plan-cert]').forEach(b => b.onclick = () => {

@@ -4,7 +4,7 @@
    · 알림 클릭 시 앱 열기
    ===================================================== */
 
-const CACHE = 'cbp-shell-v1';
+const CACHE = 'cbp-shell-v2';
 const SHELL = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   './data.js',
   './app.js',
   './config.js',
+  './certs-db.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'

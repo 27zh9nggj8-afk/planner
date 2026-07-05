@@ -517,6 +517,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .intro-hero { text-align: center; margin-bottom: 28px; }
 .intro-logo { font-size: 44px; margin-bottom: 12px; }
 
+.intro-logo-img {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
 .intro-card {
   width: 100%;
   margin-bottom: 12px;
