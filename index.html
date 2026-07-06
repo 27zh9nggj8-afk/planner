@@ -1,33 +1,430 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="theme-color" content="#0071e3">
-  <title>학점플래너</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="icon-192.png">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="fonts.css">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>학점플래너 — 학점은행제, 이제 계획대로</title>
+<meta name="description" content="학점은행제 학위 취득까지 남은 학점과 시간을 한눈에. 자격증·독학사·수업 계획을 학점플래너 하나로 관리하세요.">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="fonts.css">
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #fbfbfd;
+    --bg-2: #ffffff;
+    --text: #1d1d1f;
+    --text-2: #48484f;
+    --text-3: #86868b;
+    --border: rgba(0,0,0,0.08);
+    --accent: #0071e3;
+    --accent-2: #42a1ff;
+    --card: #ffffff;
+    --card-shadow: 0 20px 50px rgba(0,0,0,0.08);
+    --radius: 22px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --bg-2: #0b0b0d;
+      --text: #f5f5f7;
+      --text-2: #c7c7cc;
+      --text-3: #86868b;
+      --border: rgba(255,255,255,0.1);
+      --accent: #2f9bff;
+      --accent-2: #5db2ff;
+      --card: #161618;
+      --card-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+  }
+  html { scroll-behavior: smooth; overflow-x: hidden; width: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--font-main);
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    width: 100%;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- nav ---------- */
+  header.nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 1080px; margin: 0 auto; padding: 0 24px;
+    height: 52px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .brand img { height: 22px; width: auto; }
+  .nav-cta {
+    font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 980px;
+    background: var(--accent); color: #fff; text-decoration: none;
+    transition: transform .15s ease, opacity .15s ease;
+  }
+  .nav-cta:hover { opacity: .85; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 168px 24px 90px;
+    text-align: center;
+    position: relative;
+  }
+  .hero-logo { height: 60px; margin-bottom: 22px; animation: float 5s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .hero h1 {
+    font-size: clamp(34px, 6vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    margin: 0 0 18px;
+    background: linear-gradient(180deg, var(--text) 60%, var(--text-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.sub {
+    font-size: clamp(16px, 2.4vw, 21px);
+    color: var(--text-2);
+    max-width: 640px;
+    margin: 0 auto 34px;
+    line-height: 1.55;
+  }
+  .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn-primary, .btn-secondary {
+    font-size: 16px; font-weight: 600; padding: 13px 28px; border-radius: 980px;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 24px rgba(0,113,227,0.35); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,113,227,0.42); }
+  .btn-secondary { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+  .btn-secondary:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+
+  /* ---------- hero mock ---------- */
+  .mock-stage { margin-top: 64px; display: flex; justify-content: center; perspective: 1400px; }
+  .mock-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--card);
+    border-radius: 28px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border);
+    padding: 26px 24px;
+    transform: rotateX(6deg);
+    animation: floatCard 6s ease-in-out infinite;
+  }
+  @keyframes floatCard { 0%,100% { transform: rotateX(6deg) translateY(0); } 50% { transform: rotateX(6deg) translateY(-10px); } }
+  .mock-card .k { font-size: 12.5px; color: var(--text-3); font-weight: 600; }
+  .mock-card .num { font-size: 46px; font-weight: 800; letter-spacing: -0.02em; margin: 2px 0 14px; }
+  .mock-card .num small { font-size: 20px; font-weight: 600; color: var(--text-3); }
+  .mock-bar { height: 9px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; margin-bottom: 18px; }
+  .mock-bar span { display: block; height: 100%; width: 62%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .mock-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+  .mock-row:first-of-type { border-top: none; }
+  .mock-chip { font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+
+  /* ---------- sections ---------- */
+  section { padding: 110px 0; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.08em; font-size: 12.5px; font-weight: 700;
+    color: var(--accent); text-align: center; margin-bottom: 10px;
+  }
+  .section-title {
+    font-size: clamp(26px, 4vw, 40px); font-weight: 800; letter-spacing: -0.02em;
+    text-align: center; margin: 0 0 16px; line-height: 1.2;
+  }
+  .section-sub {
+    text-align: center; color: var(--text-2); font-size: 17px; max-width: 560px;
+    margin: 0 auto 60px; line-height: 1.6;
+  }
+
+  .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 860px) { .feature-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .feature-grid { grid-template-columns: 1fr; } }
+  .feature-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px 24px; box-shadow: var(--card-shadow);
+  }
+  .feature-card .icon {
+    width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+    font-size: 21px; margin-bottom: 16px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .feature-card h3 { font-size: 17.5px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .feature-card p { font-size: 14px; color: var(--text-2); line-height: 1.6; margin: 0; }
+
+  /* ---------- how (alternating rows) ---------- */
+  .how-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center;
+    padding: 56px 0;
+  }
+  .how-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .how-row.rev .how-text { order: 2; }
+  .how-row.rev .how-visual { order: 1; }
+  @media (max-width: 780px) {
+    .how-row, .how-row.rev .how-text, .how-row.rev .how-visual { grid-template-columns: 1fr; order: initial; }
+    .how-row { display: block; }
+    .how-row .how-visual { margin-top: 26px; }
+  }
+  .how-tag { font-size: 12.5px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+  .how-text h3 { font-size: clamp(21px, 3vw, 28px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 14px; line-height: 1.3; }
+  .how-text p { font-size: 15.5px; color: var(--text-2); line-height: 1.7; margin: 0; }
+  .how-visual {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--card-shadow); padding: 24px; min-height: 200px;
+    display: flex; flex-direction: column; justify-content: center; gap: 10px;
+  }
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 980px;
+    border: 1px solid var(--border); background: var(--bg-2);
+  }
+  .pill.on { background: var(--accent); color: #fff; border-color: transparent; }
+  .search-mock {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 12px;
+    background: var(--bg-2); border: 1px solid var(--border); font-size: 14px; color: var(--text-3);
+  }
+  .result-mock { display: flex; justify-content: space-between; align-items: center; padding: 10px 2px; font-size: 13.5px; border-top: 1px solid var(--border); }
+  .result-mock:first-of-type { border-top: none; }
+
+  /* ---------- pricing ---------- */
+  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 720px; margin: 0 auto; }
+  @media (max-width: 620px) { .pricing-grid { grid-template-columns: 1fr; } }
+  .price-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px 28px; box-shadow: var(--card-shadow);
+  }
+  .price-card.highlight { border: 1.5px solid var(--accent); position: relative; }
+  .price-card .badge {
+    position: absolute; top: -13px; left: 28px; background: var(--accent); color: #fff;
+    font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 980px;
+  }
+  .price-card h4 { font-size: 15px; font-weight: 700; color: var(--text-2); margin: 0 0 6px; }
+  .price-card .amount { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 18px; }
+  .price-card .amount small { font-size: 14px; font-weight: 500; color: var(--text-3); }
+  .price-card ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .price-card li { font-size: 14px; color: var(--text-2); display: flex; gap: 8px; align-items: flex-start; }
+  .price-card li::before { content: '✓'; color: var(--accent); font-weight: 700; }
+
+  /* ---------- trust ---------- */
+  .trust { text-align: center; }
+  .trust-note {
+    display: inline-block; font-size: 13px; color: var(--text-3); line-height: 1.8;
+    border: 1px solid var(--border); border-radius: 16px; padding: 18px 24px; max-width: 640px;
+  }
+
+  /* ---------- final cta ---------- */
+  .final-cta {
+    text-align: center; padding: 100px 24px 130px;
+    background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%);
+  }
+  .final-cta h2 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 16px; }
+  .final-cta p { color: var(--text-2); font-size: 16px; margin: 0 0 32px; }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 36px 24px; text-align: center;
+    color: var(--text-3); font-size: 12.5px; line-height: 1.8;
+  }
+
+  /* scroll reveal */
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+</style>
 </head>
 <body>
-  <div id="app">
-    <nav id="sidebar">
-      <div class="brand">학점플래너</div>
-    </nav>
-    <main id="main">
-      <div id="view"></div>
-    </main>
-    <nav id="tabbar"></nav>
-  </div>
-  <div id="modal-root"></div>
 
-  <script src="config.js"></script>
-  <script src="certs-db.js"></script>
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+<header class="nav">
+  <div class="nav-inner">
+    <div class="brand"><img src="logo-mark.png" alt=""> 학점플래너</div>
+    <a class="nav-cta" href="app/" id="nav-cta">시작하기</a>
+  </div>
+</header>
+
+<section class="hero">
+  <img src="logo-mark.png" class="hero-logo" alt="학점플래너">
+  <h1>학점은행제,<br>이제 계획대로.</h1>
+  <p class="sub">남은 학점과 졸업 시점을 한눈에. 수업·자격증·독학사 계획을<br class="br-desktop"> 학점플래너 하나로 관리하세요.</p>
+  <div class="hero-ctas">
+    <a class="btn-primary" href="app/" id="cta-start">무료로 시작하기 →</a>
+    <a class="btn-secondary" href="#features">더 알아보기</a>
+  </div>
+
+  <div class="mock-stage reveal" id="mock">
+    <div class="mock-card">
+      <div class="k">전체 진행률</div>
+      <div class="num">62<small>%</small></div>
+      <div class="mock-bar"><span></span></div>
+      <div class="mock-row"><span>전공 (필수)</span><span><b>48</b> / 60학점</span></div>
+      <div class="mock-row"><span>교양 (필수)</span><span><b>22</b> / 30학점</span></div>
+      <div class="mock-row"><span>목표 학위수여</span><span class="mock-chip">2027년 8월</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow reveal">WHY 학점플래너</div>
+    <h2 class="section-title reveal">혼자 계획해도, 흔들리지 않게</h2>
+    <p class="section-sub reveal">공식 학점인정 기준 고시를 반영해 매일 계산기 두드릴 필요 없이, 남은 학점과 최적의 경로를 자동으로 알려드려요.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card reveal">
+        <div class="icon">🗺️</div>
+        <h3>자동 로드맵</h3>
+        <p>목표 학위수여 시점을 정하면, 학기별로 얼마나 들어야 하는지 자동으로 계산해 드려요.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon">🔎</div>
+        <h3>자격증 검색</h3>
+        <p>781개 자격 데이터베이스에서 검색하고 누르기만 하면 인정 학점과 전공 연계가 바로 반영돼요.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon">🎓</div>
+        <h3>독학사 계획</h3>
+        <p>단계와 목표 합격 과목 수만 고르면 인정 학점을 자동으로 계산해 계획에 추가해요.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon">🔔</div>
+        <h3>신청 기간 알림</h3>
+        <p>연 4회뿐인 학점인정 신청 기간을 놓치지 않도록 알림으로 챙겨 드려요.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon">📚</div>
+        <h3>중복 과목 검사</h3>
+        <p>이름이 비슷한 과목을 자동으로 감지해 중복·대체 과목으로 인한 손해를 미리 막아요.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon">🔒</div>
+        <h3>내 기기에 안전하게</h3>
+        <p>기본은 이 기기에만 저장. 필요하면 로그인해서 여러 기기로 이어갈 수 있어요.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow reveal">HOW IT WORKS</div>
+    <h2 class="section-title reveal">복잡한 학점 계산,<br>이렇게 쉬워져요</h2>
+
+    <div class="how-row">
+      <div class="how-text reveal">
+        <div class="how-tag">STEP 1</div>
+        <h3>목표만 정하면 끝</h3>
+        <p>학위 과정, 전공, 지금까지 인정받은 학점, 목표 수여 시점만 입력하면 나머지는 학점플래너가 계산해요. 연 42학점·학기 24학점 같은 공식 제한도 자동으로 반영돼요.</p>
+      </div>
+      <div class="how-visual reveal">
+        <div class="pill-row">
+          <span class="pill on">학사학위</span>
+          <span class="pill">전문학사</span>
+          <span class="pill">타전공 학사</span>
+        </div>
+        <div class="mock-row" style="border-top:none"><span>목표 수여</span><span class="mock-chip">2027년 8월</span></div>
+        <div class="mock-row"><span>수업 마감까지</span><span><b>212</b>일</span></div>
+      </div>
+    </div>
+
+    <div class="how-row rev">
+      <div class="how-text reveal">
+        <div class="how-tag">STEP 2</div>
+        <h3>자격증은 검색해서 담기만</h3>
+        <p>수십 개를 나열해서 찾는 대신, 이름으로 검색해서 원하는 급수를 누르면 인정 학점과 전공 연계가 자동으로 계획에 추가돼요.</p>
+      </div>
+      <div class="how-visual reveal">
+        <div class="search-mock">🔎 SMAT</div>
+        <div class="result-mock"><span>SMAT 1급(컨설턴트)</span><b>+10학점</b></div>
+        <div class="result-mock"><span>SMAT 2급(관리자)</span><b>+6학점</b></div>
+      </div>
+    </div>
+
+    <div class="how-row">
+      <div class="how-text reveal">
+        <div class="how-tag">STEP 3</div>
+        <h3>독학사도 자동 계산</h3>
+        <p>단계와 전공, 목표 합격 과목 수만 고르면 과목당 인정 학점 기준으로 자동 계산해 계획에 넣어드려요.</p>
+      </div>
+      <div class="how-visual reveal">
+        <div class="pill-row">
+          <span class="pill">1단계</span><span class="pill on">2단계</span><span class="pill">3단계</span><span class="pill">4단계</span>
+        </div>
+        <div class="mock-row" style="border-top:none"><span>2과목 합격 목표</span><span class="mock-chip">+10학점</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow reveal">PRICING</div>
+    <h2 class="section-title reveal">부담 없이 시작하세요</h2>
+    <p class="section-sub reveal">평생 쓸 계획이니, 가격도 가볍게 갔어요.</p>
+
+    <div class="pricing-grid">
+      <div class="price-card reveal">
+        <h4>무료</h4>
+        <div class="amount">0원</div>
+        <ul>
+          <li>로드맵·과목·일정 등 모든 계획 기능</li>
+          <li>자격증·독학사 검색 및 계획</li>
+          <li>이 기기에 안전하게 저장</li>
+        </ul>
+      </div>
+      <div class="price-card highlight reveal">
+        <span class="badge">추천</span>
+        <h4>프리미엄</h4>
+        <div class="amount">9,900원 <small>· 평생 1회</small></div>
+        <ul>
+          <li>무료 기능 모두 포함</li>
+          <li>클라우드 자동 저장</li>
+          <li>여러 기기에서 이어서 계획</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="trust">
+  <div class="wrap">
+    <div class="trust-note reveal">
+      학점 기준은 국가평생교육진흥원 공개 자료와 「제28차 자격 학점인정 기준」 고시(2025.12.15 시행)를 반영했습니다.<br>
+      학점인정 여부의 최종 확인은 학점은행 홈페이지(www.cb.or.kr) 또는 ☎ 1600-0400에서 해주세요.
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <h2 class="reveal">지금, 계획을 시작해 보세요</h2>
+  <p class="reveal">가입은 1분, 계획은 평생 남습니다.</p>
+  <a class="btn-primary reveal" href="app/">학점플래너 시작하기 →</a>
+</section>
+
+<footer>
+  학점플래너 · 이 페이지는 학점은행제 학위 취득 계획을 돕는 개인용 서비스입니다.<br>
+  © <span id="year"></span> 학점플래너. All rights reserved.
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // 이미 계획을 시작한 방문자는 CTA 문구를 바꿔 이어서 하도록 유도
+  try {
+    if (localStorage.getItem('cbp_state_v1')) {
+      document.querySelectorAll('#nav-cta, #cta-start').forEach(el => {
+        el.textContent = el.id === 'nav-cta' ? '이어서 하기' : '이어서 계획하기 →';
+      });
+    }
+  } catch (e) {}
+
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+
 </body>
 </html>

@@ -270,6 +270,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .banner.info { background: var(--accent-soft); color: var(--accent); }
 .banner.ok { background: var(--ok-soft); color: var(--ok); }
 
+/* 눈에 덜 띄지만 눌러서 자세히 볼 수 있는 경고 (부족 학점 등) */
+.warn-collapse {
+  border-radius: var(--radius-s);
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.warn-collapse summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.warn-collapse summary::-webkit-details-marker { display: none; }
+.warn-collapse summary::after {
+  content: '자세히';
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-decoration: underline;
+}
+.warn-collapse[open] summary::after { content: '접기'; }
+.warn-collapse svg { width: 15px; height: 15px; flex-shrink: 0; }
+.warn-collapse.danger summary svg { color: var(--danger); }
+.warn-collapse.warn summary svg { color: var(--warn); }
+.warn-collapse.info summary svg { color: var(--accent); }
+.warn-collapse .detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--text-2); line-height: 1.6; }
+
+/* 강제 규정 등 거슬리지 않게 알려주는 팁 */
+.tip {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin-top: 8px;
+}
+
 /* ---------- 진행 바 ---------- */
 
 .bar {
@@ -528,11 +570,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .intro-logo { font-size: 44px; margin-bottom: 12px; }
 
 .intro-logo-img {
-  width: 76px;
-  height: 76px;
-  border-radius: 18px;
+  width: auto;
+  height: 64px;
   margin-bottom: 14px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .intro-card {

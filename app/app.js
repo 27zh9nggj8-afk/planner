@@ -79,6 +79,7 @@ const defaultState = () => ({
     major: '',
     startDate: todayStr(),
     goalYm: null,          // 목표 학위수여 시점 'YYYY-MM' (2월 또는 8월)
+    currentTerm: 'first',  // 지금 듣고 있는 학기: 'first'(1학기) · 'second'(2학기)
     earned: { major: 0, liberal: 0, general: 0 },   // 이미 인정받은 학점
     pending: { major: 0, liberal: 0, general: 0 },  // 이수했지만 학점인정 신청 전인 학점
     certsUsed: 0
@@ -98,7 +99,6 @@ const defaultState = () => ({
     dayBefore: true,
     fired: {}
   },
-  tuition: 80000,        // 과목(3학점)당 수강료 가정 — 예상 비용 계산용, 사용자가 조정
   ui: { tab: 'home', sub: null, filter: 'all', schedView: 'list', calYm: null, calSel: null }
 });
 
@@ -480,11 +480,11 @@ function buildRoadmap() {
   const planned = terms.reduce((s, t) => s + t.total, 0);
   const shortfall = courseNeed - planned;
 
-  // 경고 (사용자 보충 계획을 반영한 후의 진짜 부족분만 경고)
+  // 경고 (사용자 보충 계획을 반영한 후의 진짜 부족분만 경고) — short는 평소에 보이는 축약 문구, msg는 눌러야 보이는 상세 설명
   const warnings = [];
   if (termCount === 0 && needs.total > 0) {
     warnings.push({
-      level: 'danger',
+      level: 'danger', short: '목표 시점까지 기간 부족',
       msg: `${gi.label} 수여를 받으려면 수업을 ${fmtDate(gi.studyEnd, { day: false })}까지 이수해야 하는데, 남은 기간이 없습니다. 목표를 다음 수여 시점으로 변경해 주세요.`
     });
   }
@@ -496,35 +496,35 @@ function buildRoadmap() {
   if (shortfall > 0 && termCount > 0) {
     const minT = minTermsFor(courseNeedRaw);
     warnings.push({
-      level: 'danger',
+      level: 'danger', short: `${shortfall}학점 부족`,
       msg: `${gi.label} 수여 목표까지 수업으로는 최대 ${capTotal}학점만 인정돼요(학기 24·연 42학점 제한). 필요한 수업 ${courseNeedRaw}학점 중 ${gapRaw}학점이 부족합니다${certSupTotal > 0 ? ` — 추천 자격증 ${certSupTotal}학점을 병행해도 ${shortfall}학점이 모자라요` : ''}. 수업만으로 하려면 최소 ${minT}학기가 필요하니, 자격증·독학사 보충 계획을 늘리거나 목표 시점을 늦춰 주세요.${planSupTotal > 0 ? ` (직접 세우신 보충 계획 ${planSupTotal}학점은 이미 반영했어요)` : ''}`
     });
   } else if (gapRaw > 0 && termCount > 0) {
     warnings.push({
-      level: 'warn',
+      level: 'warn', short: `자격증 병행 필요 (${gapRaw}학점)`,
       msg: `수업만으로는 ${gapRaw}학점이 부족한 목표예요. 자동 추천 자격증 ${certSupTotal}학점을 병행하면 달성 가능합니다 — 아래 추천을 내 계획으로 확정해 두세요.`
     });
   } else if (planSupTotal > 0 && needs.total > 0 && termCount > 0) {
     warnings.push({
-      level: 'info',
+      level: 'info', short: `보충 계획 ${planSupTotal}학점 반영됨`,
       msg: `직접 세우신 보충 계획 ${planSupTotal}학점(자격증·독학사 등)을 반영한 로드맵입니다. 계획이 바뀌면 로드맵 화면에서 언제든 수정할 수 있어요.`
     });
   }
   terms.forEach((t, i) => {
-    if (t.total > 24) warnings.push({ level: 'warn', msg: `${i + 1}학기 계획이 학기 최대 인정 학점(24학점)을 초과합니다.` });
+    if (t.total > 24) warnings.push({ level: 'warn', short: `${i + 1}학기 학점 초과`, msg: `${i + 1}학기 계획이 학기 최대 인정 학점(24학점)을 초과합니다.` });
   });
   for (let i = 0; i + 1 < terms.length; i += 2) {
     if (terms[i].total + terms[i + 1].total > 42)
-      warnings.push({ level: 'warn', msg: `${i + 1}~${i + 2}학기 합계가 연간 최대 인정 학점(42학점)을 초과합니다. 자격증 학점은 이 제한에 포함되지 않습니다.` });
+      warnings.push({ level: 'warn', short: `${i + 1}~${i + 2}학기 연간 한도 초과`, msg: `${i + 1}~${i + 2}학기 합계가 연간 최대 인정 학점(42학점)을 초과합니다. 자격증 학점은 이 제한에 포함되지 않습니다.` });
   }
 
-  // 학위요건: 평가인정 학습과목·시간제등록 18학점 이상 필수
+  // 학위요건: 평가인정 학습과목·시간제등록 18학점 이상 필수 — 경고가 아니라 은은한 Tip으로만 안내
   const doneCourseCredits = S.courses.filter(c => c.status === 'done').reduce((s, c) => s + c.credits, 0);
-  if (needs.total > 0 && doneCourseCredits + planned < (getReq().minBank || 18)) {
-    warnings.push({ level: 'warn', msg: `학위를 받으려면 평가인정 학습과목 또는 시간제등록으로 반드시 18학점 이상을 이수해야 합니다. 자격증·전적대 학점만으로 채우지 않도록 주의하세요.` });
-  }
+  const minBankTip = (needs.total > 0 && doneCourseCredits + planned < (getReq().minBank || 18))
+    ? `학위를 받으려면 평가인정 학습과목 또는 시간제등록으로 ${getReq().minBank || 18}학점 이상을 이수해야 해요. 자격증·전적대 학점만으로 채우지 않도록 확인해 보세요.`
+    : null;
 
-  return { gi, needs, terms, certs, myPlans, planSup, planSupTotal, courseNeed, warnings, shortfall, termCount };
+  return { gi, needs, terms, certs, myPlans, planSup, planSupTotal, courseNeed, warnings, minBankTip, shortfall, termCount };
 }
 
 /* ---------- 라우팅 ---------- */
@@ -602,11 +602,12 @@ function bindHelp() {
 let ob = {
   phase: 'auth',    // auth(로그인/가입) → intro(분기) → guide(초보자 설명) → plan(계획 세우기)
   guideStep: 0,
-  step: 0, degree: 'bachelor', major: '',
+  step: 0, degree: 'bachelor', major: '', currentTerm: 'first',
   earned: { major: 0, liberal: 0, general: 0 },
   pending: { major: 0, liberal: 0, general: 0 },
   certsUsed: 0,
-  courses: [], plans: [], goalYm: null
+  courses: [], plans: [], goalYm: null,
+  certQ: '', dokhakStage: null, dokhakMajor: null
 };
 
 const PLAN_STEPS = () => [obStep1, obStep2, obStep3, obStep4, obStep5, obStep6];
@@ -639,7 +640,7 @@ function renderOnboarding() {
 function obAuth() {
   return `
     <div class="intro-hero">
-      <img src="icon-192.png" class="intro-logo-img" alt="학점플래너">
+      <img src="logo-mark.png" class="intro-logo-img" alt="학점플래너">
       <h1 style="text-align:center">학점플래너</h1>
       <p class="sub" style="text-align:center">혼자서도 체계적인 학위 계획.<br>계정으로 시작하면 어떤 기기에서든 이어서 할 수 있어요.</p>
     </div>
@@ -650,15 +651,14 @@ function obAuth() {
     <button class="opt-card intro-card" data-auth-signup>
       <div class="t">✨ 처음이에요</div>
       <div class="d">아이디·비밀번호만 만들면 바로 시작! 이메일 인증은 없어요.</div>
-    </button>
-    <button class="btn full" data-quick-preview style="margin-top:6px;border:0;color:var(--text-3)">가입 전에 ⚡ 30초 미리보기부터 해볼래요</button>`;
+    </button>`;
 }
 
 /* --- 첫 화면: 초보자 / 바로 계획 분기 --- */
 function obIntro() {
   return `
     <div class="intro-hero">
-      <img src="icon-192.png" class="intro-logo-img" alt="">
+      <img src="logo-mark.png" class="intro-logo-img" alt="">
       <h1 style="text-align:center">반가워요!<br>학점플래너예요</h1>
       <p class="sub" style="text-align:center">학점은행제 학위 취득, 혼자서도 체계적으로 할 수 있어요.<br>어떻게 시작할까요?</p>
     </div>
@@ -666,63 +666,11 @@ function obIntro() {
       <div class="t">🌱 학은제, 처음이에요</div>
       <div class="d">차근차근 알려주세요 — 학점은행제가 뭔지, 학위 종류, 학점 쌓는 법부터 6개 스텝으로 쉽게 설명한 뒤 계획을 세워요.</div>
     </button>
-    <button class="opt-card intro-card" data-quick-preview style="border-style:dashed">
-      <div class="t">⚡ 30초 미리보기</div>
-      <div class="d">계획을 만들기 전에, 몇 학점이 남고 언제 졸업할 수 있는지 먼저 확인해 보세요.</div>
-    </button>
     <button class="opt-card intro-card" data-route="direct">
       <div class="t">🚀 어느 정도 알고 있어요</div>
       <div class="d">바로 계획을 세우고 싶어요 — 내 정보를 입력하고 곧장 로드맵을 만들어요. 이미 진행 중이어도 이어서 계획할 수 있어요.</div>
     </button>
     <div class="footnote" style="text-align:center">모든 단계에서 ${ICONS.help.replace('<svg', '<svg style="width:13px;height:13px;vertical-align:-2px"')} 버튼을 누르면 자세한 설명을 볼 수 있어요.</div>`;
-}
-
-/* --- 30초 미리보기: 3문항 → 예상 졸업 시점·필요 학점·비용 --- */
-function quickPreviewModal() {
-  openModal(`
-    <h3>⚡ 30초 미리보기</h3>
-    <div class="field"><label>목표 학위</label>
-      <div class="seg" id="qp-deg">
-        ${Object.entries(DATA.degrees).map(([k, d], i) => `<button data-deg="${k}" class="${i === 0 ? 'active' : ''}">${d.short}</button>`).join('')}
-      </div>
-    </div>
-    <div class="field"><label>이미 가진 학점 (대략, 없으면 0)</label>
-      <input type="number" id="qp-earned" min="0" max="200" value="0">
-      <div class="hint">전적 대학 학점, 자격증 등 인정받았거나 받을 학점을 대략이면 돼요.</div>
-    </div>
-    <button class="btn primary full" id="qp-calc">예상 결과 보기</button>
-    <div id="qp-result"></div>`);
-
-  let deg = 'bachelor';
-  $$('#qp-deg button').forEach(b => b.onclick = () => {
-    deg = b.dataset.deg;
-    $$('#qp-deg button').forEach(x => x.classList.toggle('active', x === b));
-  });
-  $('#qp-calc').onclick = () => {
-    const req = DATA.degrees[deg];
-    const earned = Math.max(0, Number($('#qp-earned').value) || 0);
-    const need = Math.max(0, req.total - earned);
-    const today = todayStr();
-    const opts = conferralOpts(10);
-    const byCourse = opts.find(g => capacity(termCountBetween(today, g.studyEnd)) >= need);
-    const byMix = opts.find(g => capacity(termCountBetween(today, g.studyEnd)) + 45 >= need);
-    const courses = Math.ceil(need / 3);
-    const tuition = courses * (S.tuition || 80000);
-    const fees = need * DATA.limits.fees.perCredit + DATA.limits.fees.register;
-    $('#qp-result').innerHTML = `
-      <div class="divider"></div>
-      <div class="stat-row"><span class="label">남은 학점</span><span class="val"><b>${need}</b>학점 (과목 약 ${courses}개)</span></div>
-      <div class="stat-row"><span class="label">수업만으로</span><span class="val"><b>${byCourse ? byCourse.label : '4년 이상'}</b> 수여 가능</span></div>
-      <div class="stat-row"><span class="label">자격증·독학사 병행 시</span><span class="val"><b>${byMix ? byMix.label : '계산 불가'}</b>까지 단축 가능</span></div>
-      <div class="stat-row"><span class="label">예상 비용(대략)</span><span class="val"><b>${(tuition + fees).toLocaleString()}원</b></span></div>
-      <div class="hint">수강료를 과목당 ${(S.tuition || 80000).toLocaleString()}원으로 가정한 값이에요 (기관마다 달라요). 행정 수수료(학점당 1,000원 + 등록 4,000원) 포함.</div>
-      <button class="btn primary full" id="qp-go" style="margin-top:12px">이대로 정확한 계획 만들기 →</button>`;
-    $('#qp-go').onclick = () => {
-      ob.degree = deg;
-      ob.phase = 'plan'; ob.step = 0;
-      closeModal(); renderOnboarding();
-    };
-  };
 }
 
 /* --- 초보자 가이드 (스텝 1~6) --- */
@@ -777,7 +725,7 @@ function obStep2() {
       <label>전공명 직접 입력</label>
       <input type="text" id="ob-major-custom" value="${esc(!majors.includes(ob.major) ? ob.major : '')}" placeholder="예: 문화예술경영학">
     </div>
-    <div class="hint" style="margin-top:-6px;margin-bottom:14px">전공필수 과목 예시는 인기 전공 일부만 제공돼요. 없는 전공은 학점은행 홈페이지의 표준교육과정에서 확인할 수 있고, 자격증 전공 연계(제28차 고시 ${DATA.certs.length}개 수록)는 모든 전공에서 자동으로 찾아드려요.</div>
+    <div class="hint" style="margin-top:-6px;margin-bottom:14px">자격증 전공 연계(제28차 고시 ${DATA.certs.length}개 수록)는 모든 전공에서 자동으로 찾아드려요. 전공필수 과목은 직접 등록한 과목 기준으로 관리돼요.</div>
     <div style="margin-top:28px;display:flex;gap:8px">
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-next>다음</button>
@@ -801,7 +749,7 @@ function obStep3() {
       <div class="hint">예: 지난 학기에 이수한 과목, 합격했지만 아직 신청 안 한 자격증 학점. 다음 신청 기간에 알림으로 챙겨 드려요.</div></div>
 
     <div class="field" style="margin-top:20px">
-      <label>학점인정에 이미 사용한 자격증 수</label>
+      <label>학점인정에 이미 사용했거나, 합격했지만 아직 신청 안 한 자격증 수</label>
       <select id="ob-certs">${[0, 1, 2, 3].map(n => `<option value="${n}" ${ob.certsUsed === n ? 'selected' : ''}>${n}개</option>`).join('')}</select>
       <div class="hint">자격증 학점인정은 학사 3개 · 전문학사 2개 · 타전공 과정 1개까지 가능합니다. (기능사는 인정 불가)</div>
     </div>
@@ -815,6 +763,13 @@ function obStep4() {
   return `
     <h1>지금 듣고 있는 강의가 있나요? ${helpBtn('courses')}</h1>
     <p class="sub">현재 수강 중인 과목을 등록해 두면 진행률과 로드맵에 바로 반영돼요. 없으면 건너뛰어도 괜찮아요.</p>
+    <div class="field">
+      <label>지금은 몇 학기인가요?</label>
+      <div class="seg" id="ob-term">
+        <button data-term="first" class="${(ob.currentTerm || 'first') === 'first' ? 'active' : ''}">1학기</button>
+        <button data-term="second" class="${ob.currentTerm === 'second' ? 'active' : ''}">2학기</button>
+      </div>
+    </div>
     ${ob.courses.length ? ob.courses.map((c, i) => `
       <div class="item">
         <span class="color-dot" style="background:${CAT_COLORS[c.category]}"></span>
@@ -840,13 +795,20 @@ function obStep4() {
     </div>`;
 }
 
+/* 독학학위제 단계별 과목당 인정 학점 · 인정 구분 */
+const DOKHAK_STAGE = {
+  1: { label: '1단계 · 교양과정인정시험', perCredit: 4, target: 'liberal' },
+  2: { label: '2단계 · 전공기초과정인정시험', perCredit: 5, target: 'major' },
+  3: { label: '3단계 · 전공심화과정인정시험', perCredit: 5, target: 'major' },
+  4: { label: '4단계 · 학위취득 종합시험', perCredit: 0, target: 'major' }
+};
+
 function obStep5() {
-  const isBachelor = ob.degree === 'bachelor' || ob.degree === 'bachelor2';
-  // 현실적으로 도전할 만한 자격 위주 추천 (기술사·전문직 등 초고난도는 검색으로)
-  const relatedAll = DATA.certs.filter(c => c.majors.includes(ob.major));
-  const related = relatedAll.filter(c => c.credits <= 30).sort((a, b) => b.credits - a.credits).slice(0, 12);
   const limit = DATA.degrees[ob.degree].certLimit;
   const slotsLeft = Math.max(0, limit - ob.certsUsed - ob.plans.filter(p => p.kind === 'cert').length);
+  const q = (ob.certQ || '').trim();
+  const isDokhakQuery = /독학/.test(q);
+
   return `
     <h1>준비 중인 자격증이나<br>독학사 시험이 있나요? ${helpBtn('plans')}</h1>
     <p class="sub">자격증·독학학위제 시험 학점은 <b>연 42학점 제한에 포함되지 않아</b> 기간 단축의 핵심이에요. 계획에 넣어두면 로드맵이 그만큼 여유 있게 계산됩니다. 없으면 건너뛰어도 돼요.</p>
@@ -859,27 +821,21 @@ function obStep5() {
         <button class="icon-btn" data-ob-del-plan="${i}">${ICONS.trash}</button>
       </div>`).join('')}
 
-    ${related.length ? `
-      <div class="section-title">‘${esc(ob.major)}’ 전공학점으로 인정되는 자격증 (제28차 고시 기준)</div>
-      ${related.map(c => {
-        const on = ob.plans.some(p => p.name === c.name);
-        return `<button class="opt-card ${on ? 'selected' : ''}" data-ob-cert="${esc(c.name)}" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-          <span><span class="t" style="font-size:14px">${esc(c.name)}</span>
-          <span class="d" style="display:block">${esc(c.grade)} · 전공학점 인정</span></span>
-          <span class="chip accent">+${c.credits}학점</span>
-        </button>`;
-      }).join('')}
-      <div class="hint" style="margin-top:2px">자격증은 ${isBachelor ? '학사 최대 3개' : '전문학사 최대 2개'}까지 인정 — 지금 ${slotsLeft}개 더 넣을 수 있어요.</div>` : ''}
+    <div class="field" style="margin-top:${ob.plans.length ? '18' : '0'}px">
+      <label>자격증 · 독학사 검색</label>
+      <input type="text" id="ob-cert-search" value="${esc(ob.certQ || '')}" placeholder="예: 조리, SMAT, 컴활, 독학사">
+    </div>
+
+    ${ob.dokhakStage ? obDokhakPicker() : (q ? obCertSearchResults(q, isDokhakQuery) : obCertRelated(slotsLeft))}
 
     <div class="mini-form">
-      <div class="field"><label>직접 추가 (자격증 · 독학사 시험 등)</label>
+      <div class="field"><label>직접 추가 (검색에 없는 자격증 · 기타)</label>
         <div class="seg" id="ob-p-kind">
           ${Object.entries(PLAN_KINDS).map(([k, l], i) => `<button data-kind="${k}" class="${i === 0 ? 'active' : ''}">${l}</button>`).join('')}
         </div>
       </div>
-      <div class="field"><label>이름</label><input type="text" id="ob-p-name" placeholder="예: 텔레마케팅관리사 / 독학사 2단계 경영학"></div>
-      <div class="field"><label>예상 인정 학점</label><input type="number" id="ob-p-credits" min="1" max="45" placeholder="예: 18">
-        <div class="hint">자격증은 학점은행 홈페이지 ‘자격 검색’, 독학사는 과목당 4~5학점이 기준이에요.</div></div>
+      <div class="field"><label>이름</label><input type="text" id="ob-p-name" placeholder="예: 텔레마케팅관리사"></div>
+      <div class="field"><label>예상 인정 학점</label><input type="number" id="ob-p-credits" min="1" max="45" placeholder="예: 18"></div>
       <div class="field" style="margin-bottom:4px"><label>인정 구분</label>
         <div class="seg" id="ob-p-target">
           ${Object.entries(CATS).map(([k, l], i) => `<button data-target="${k}" class="${i === 0 ? 'active' : ''}">${l}</button>`).join('')}
@@ -892,6 +848,87 @@ function obStep5() {
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-next>${ob.plans.length ? '다음' : '지금은 없어요, 다음'}</button>
     </div>`;
+}
+
+/* 검색어가 없을 때: 내 전공과 연계된 자격증 추천 */
+function obCertRelated(slotsLeft) {
+  const isBachelor = ob.degree === 'bachelor' || ob.degree === 'bachelor2';
+  const relatedAll = DATA.certs.filter(c => c.majors.includes(ob.major));
+  const related = relatedAll.filter(c => c.credits <= 30).sort((a, b) => b.credits - a.credits).slice(0, 12);
+  return `
+    ${related.length ? `
+      <div class="section-title">‘${esc(ob.major)}’ 전공학점으로 인정되는 자격증 (제28차 고시 기준)</div>
+      ${related.map(c => {
+        const on = ob.plans.some(p => p.name === c.name);
+        return `<button class="opt-card ${on ? 'selected' : ''}" data-ob-cert="${esc(c.name)}" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+          <span><span class="t" style="font-size:14px">${esc(c.name)}</span>
+          <span class="d" style="display:block">${esc(c.grade)} · 전공학점 인정</span></span>
+          <span class="chip accent">+${c.credits}학점</span>
+        </button>`;
+      }).join('')}
+      <div class="hint" style="margin-top:2px">자격증은 ${isBachelor ? '학사 최대 3개' : '전문학사 최대 2개'}까지 인정 — 지금 ${slotsLeft}개 더 넣을 수 있어요.</div>` : ''}
+    <button class="btn full" data-dokhak-open style="margin-top:8px">🎓 독학사 시험 찾기</button>`;
+}
+
+/* 검색어가 있을 때: 자격증 검색 결과 (또는 독학사 유도) */
+function obCertSearchResults(q, isDokhakQuery) {
+  if (isDokhakQuery) {
+    return `<button class="btn full" data-dokhak-open style="margin:4px 0 14px">🎓 독학사 단계 선택하러 가기 →</button>`;
+  }
+  const query = q.toLowerCase();
+  const matches = DATA.certs.filter(c => c.name.toLowerCase().includes(query)).slice(0, 30);
+  if (!matches.length) {
+    return `<div class="card empty" style="padding:20px">${ICONS.award}<div>‘${esc(q)}’와 일치하는 자격증이 없어요.<br>아래에서 직접 추가하거나, 검색어를 바꿔보세요.</div></div>`;
+  }
+  return `
+    <div class="section-title" style="margin-top:6px">검색 결과 ${matches.length}건</div>
+    ${matches.map(c => {
+      const on = ob.plans.some(p => p.name === c.name);
+      const isMajor = c.majors.includes(ob.major);
+      return `<button class="opt-card ${on ? 'selected' : ''}" data-ob-cert="${esc(c.name)}" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+        <span><span class="t" style="font-size:14px">${esc(c.name)}</span>
+        <span class="d" style="display:block">${esc(c.grade)} · ${isMajor ? '전공학점 인정' : '일반선택 인정'}</span></span>
+        <span class="chip ${isMajor ? 'accent' : ''}">+${c.credits}학점</span>
+      </button>`;
+    }).join('')}`;
+}
+
+/* 독학사 단계 선택 → 전공/목표 합격 과목수 선택 */
+function obDokhakPicker() {
+  if (ob.dokhakStage === 'select') {
+    return `
+      <div class="section-title" style="margin-top:6px">독학학위제 — 단계를 선택하세요 <button class="icon-btn" data-dokhak-back style="float:right">${ICONS.left}</button></div>
+      <div class="opt-grid" style="grid-template-columns:1fr">
+        ${Object.entries(DOKHAK_STAGE).map(([k, s]) => `
+          <button class="opt-card" data-dokhak-pick="${k}">
+            <div class="t">${s.label}</div>
+            <div class="d">${s.perCredit ? `과목당 ${s.perCredit}학점 · ${CATS[s.target]} 인정` : '합격 시 남은 학점 없이 학위 요건 충족'}</div>
+          </button>`).join('')}
+      </div>`;
+  }
+  const stage = Number(ob.dokhakStage);
+  const s = DOKHAK_STAGE[stage];
+  const isBachelor = ob.degree === 'bachelor' || ob.degree === 'bachelor2';
+  const majors = isBachelor ? DATA.majors.bachelor : DATA.majors.associate;
+  const major = ob.dokhakMajor || ob.major;
+  return `
+    <div class="section-title" style="margin-top:6px">독학학위제 ${s.label} <button class="icon-btn" data-dokhak-back style="float:right">${ICONS.left}</button></div>
+    <div class="field"><label>전공</label>
+      <select id="ob-dokhak-major">
+        ${majors.map(m => `<option ${major === m ? 'selected' : ''}>${m}</option>`).join('')}
+      </select>
+    </div>
+    ${stage === 4 ? `
+      <div class="hint">4단계(학위취득 종합시험)는 합격하면 별도 학점 계산 없이 학위 요건이 충족돼요. 계획에 추가하는 대신, 시험 일정을 일정 탭에서 챙기세요.</div>
+      <button class="btn full" data-dokhak-back style="margin-top:6px">← 뒤로</button>` : `
+      <label style="font-size:13px;color:var(--text-2);display:block;margin:12px 0 6px">목표 합격 과목 수</label>
+      <div class="opt-grid" style="grid-template-columns:repeat(3,1fr)">
+        ${[1, 2, 3, 4, 5, 6].map(n => `
+          <button class="opt-card" style="padding:12px 6px;text-align:center" data-dokhak-n="${n}">
+            <div class="t" style="font-size:14px">${n}과목</div>
+            <div class="d" style="font-size:12px">+${n * s.perCredit}학점</div>
+          </button>`).join('')}
+      </div>`}`;
 }
 
 function obStep6() {
@@ -952,9 +989,6 @@ function bindOnboarding() {
   const authSignup = $('[data-auth-signup]');
   if (authSignup) authSignup.onclick = () => authModal('signup');
 
-  const qp = $('[data-quick-preview]');
-  if (qp) qp.onclick = () => quickPreviewModal();
-
   // 첫 화면 분기: 초보자 가이드 / 바로 계획
   $$('[data-route]').forEach(b => b.onclick = () => {
     ob.phase = b.dataset.route === 'beginner' ? 'guide' : 'plan';
@@ -986,6 +1020,11 @@ function bindOnboarding() {
     $('#ob-custom-wrap').style.display = majorSel.value === '__custom' ? 'block' : 'none';
   };
 
+  $$('#ob-term button').forEach(b => b.onclick = () => {
+    ob.currentTerm = b.dataset.term;
+    $$('#ob-term button').forEach(x => x.classList.toggle('active', x === b));
+  });
+
   // 수강 중 강의 추가/삭제
   let obcCat = 'major';
   $$('#ob-c-cat button').forEach(b => b.onclick = () => {
@@ -1003,8 +1042,10 @@ function bindOnboarding() {
   $$('[data-ob-del-course]').forEach(b => b.onclick = () => {
     ob.courses.splice(Number(b.dataset.obDelCourse), 1); renderOnboarding();
   });
+  const obcName = $('#ob-c-name');
+  if (obcName) obcName.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addCourse.click(); } };
 
-  // 자격증 추천 토글
+  // 자격증 검색/추천 토글
   $$('[data-ob-cert]').forEach(b => b.onclick = () => {
     const name = b.dataset.obCert;
     const idx = ob.plans.findIndex(p => p.name === name);
@@ -1014,8 +1055,49 @@ function bindOnboarding() {
       toast(`자격증 학점인정은 최대 ${limit}개까지예요`); return;
     }
     const cert = DATA.certs.find(c => c.name === name);
-    ob.plans.push({ kind: 'cert', name: cert.name, credits: cert.credits, target: 'major', status: 'planning' });
+    const target = cert.majors.includes(ob.major) ? 'major' : 'general';
+    if (target === 'general' && ob.plans.some(p => p.kind === 'cert' && p.target === 'general')) {
+      toast('전공과 무관한 자격증은 1개까지만 일반선택으로 인정돼요'); return;
+    }
+    ob.plans.push({ kind: 'cert', name: cert.name, credits: cert.credits, target, status: 'planning' });
     renderOnboarding();
+    toast(`'${cert.name}' 계획에 추가했어요`);
+  });
+
+  // 자격증 검색창
+  const certSearch = $('#ob-cert-search');
+  if (certSearch) {
+    const runSearch = () => { ob.certQ = certSearch.value; ob.dokhakStage = null; renderOnboarding(); const el = $('#ob-cert-search'); if (el) el.focus(); };
+    certSearch.onchange = runSearch;
+    certSearch.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } };
+  }
+  const dokhakOpen = $('[data-dokhak-open]');
+  if (dokhakOpen) dokhakOpen.onclick = () => { ob.dokhakStage = 'select'; renderOnboarding(); };
+  const dokhakBack = $('[data-dokhak-back]');
+  if (dokhakBack) dokhakBack.onclick = () => {
+    ob.dokhakStage = ob.dokhakStage === 'select' ? null : 'select';
+    if (!ob.dokhakStage) ob.certQ = '';
+    renderOnboarding();
+  };
+  $$('[data-dokhak-pick]').forEach(b => b.onclick = () => {
+    ob.dokhakStage = b.dataset.dokhakPick;
+    ob.dokhakMajor = ob.dokhakMajor || ob.major;
+    renderOnboarding();
+  });
+  const dokhakMajorSel = $('#ob-dokhak-major');
+  if (dokhakMajorSel) dokhakMajorSel.onchange = () => { ob.dokhakMajor = dokhakMajorSel.value; };
+  $$('[data-dokhak-n]').forEach(b => b.onclick = () => {
+    const stage = Number(ob.dokhakStage);
+    const s = DOKHAK_STAGE[stage];
+    const n = Number(b.dataset.dokhakN);
+    const major = ob.dokhakMajor || ob.major;
+    ob.plans.push({
+      kind: 'dokhak', name: `독학사 ${s.label.split(' · ')[0]} (${major}) ${n}과목`,
+      credits: n * s.perCredit, target: s.target, status: 'planning'
+    });
+    ob.dokhakStage = null; ob.certQ = '';
+    renderOnboarding();
+    toast('독학사 계획을 추가했어요');
   });
 
   // 보충 계획 직접 추가/삭제
@@ -1051,6 +1133,9 @@ function bindOnboarding() {
   $$('[data-ob-del-plan]').forEach(b => b.onclick = () => {
     ob.plans.splice(Number(b.dataset.obDelPlan), 1); renderOnboarding();
   });
+  const obpNameEl = $('#ob-p-name'), obpCreditsEl = $('#ob-p-credits');
+  if (obpNameEl) obpNameEl.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); obpCreditsEl.focus(); } };
+  if (obpCreditsEl) obpCreditsEl.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addPlan.click(); } };
 
   const prev = $('[data-prev]');
   if (prev) prev.onclick = () => {
@@ -1072,6 +1157,7 @@ function bindOnboarding() {
       degree: ob.degree,
       major: ob.major || '미정',
       startDate: todayStr(),
+      currentTerm: ob.currentTerm || 'first',
       goalYm: ob.goalYm,
       earned: { ...ob.earned },
       pending: { ...ob.pending },
@@ -1109,6 +1195,19 @@ function saveObStep() {
 
 /* ---------- 홈 ---------- */
 
+/* 부족 학점 등 경고를 짧은 요약 + 펼치면 보이는 상세로 표시 (평소엔 거슬리지 않게) */
+function warnCollapseHtml(w, opts = {}) {
+  const icon = w.level === 'info' ? ICONS.info : ICONS.alert;
+  return `<details class="warn-collapse ${w.level}">
+    <summary>${icon}<span>${esc(w.short || w.msg)}</span></summary>
+    <div class="detail">${esc(w.msg)}${opts.goRoadmap ? `<br><span role="button" data-go-roadmap style="text-decoration:underline;cursor:pointer">로드맵에서 자세히 보기 →</span>` : ''}</div>
+  </details>`;
+}
+
+function tipHtml(text) {
+  return `<div class="tip">Tip. ${esc(text)}</div>`;
+}
+
 function viewHome() {
   const n = calcNeeds();
   const req = n.req;
@@ -1124,14 +1223,13 @@ function viewHome() {
     .sort((a, b) => a.start.localeCompare(b.start))
     .slice(0, 4);
 
-  // 필수는 전공·교양뿐 — 나머지는 어느 구분으로든 채우면 되는 '자유 학점'
-  const freeReq = Math.max(0, req.total - req.major - req.liberal);
+  // 필수는 전공·교양뿐 — 나머지는 어느 구분으로든 채우면 되는 '일반' 학점 (정해진 목표치 없이 누적)
   const freeEarned = Math.max(0, n.totalEarned - Math.min(n.earned.major, req.major) - Math.min(n.earned.liberal, req.liberal));
   const bars = [
-    { k: 'major', label: '전공 (필수)', earned: n.earned.major, req: req.major },
-    { k: 'liberal', label: '교양 (필수)', earned: n.earned.liberal, req: req.liberal },
-    { k: 'free', label: '자유 (구분 무관)', earned: freeEarned, req: freeReq }
-  ].filter(b => b.req > 0);
+    { k: 'major', label: '전공 (필수)', earned: n.earned.major, req: req.major, showReq: true },
+    { k: 'liberal', label: '교양 (필수)', earned: n.earned.liberal, req: req.liberal, showReq: true },
+    { k: 'free', label: '일반', earned: freeEarned, req: 0, showReq: false, always: req.total > req.major + req.liberal }
+  ].filter(b => b.showReq ? b.req > 0 : (b.always || b.earned > 0));
 
   return `
     <div class="page-head">
@@ -1139,10 +1237,7 @@ function viewHome() {
       <div class="page-sub">${esc(req.name)} · ${esc(S.profile.major)} · 목표 ${gi.label} 수여</div>
     </div>
 
-    ${rm.warnings.length && rm.warnings[0].level !== 'info' ? `
-      <div class="banner ${rm.warnings[0].level}" role="button" data-go-roadmap style="cursor:pointer">
-        ${ICONS.alert}<div>${esc(rm.warnings[0].msg)}</div>
-      </div>` : ''}
+    ${rm.warnings.length && rm.warnings[0].level !== 'info' ? warnCollapseHtml(rm.warnings[0], { goRoadmap: true }) : ''}
 
     ${cloudConfigured() && !sbUser && location.protocol.startsWith('http') && !S.ui.loginNudgeOff ? `
       <div class="banner info">${ICONS.person}
@@ -1185,14 +1280,19 @@ function viewHome() {
     <div class="section-title">구분별 진행 상황</div>
     <div class="card">
       ${bars.map((b, i) => {
-        const p = Math.min(100, Math.round(b.earned / b.req * 100));
         const pend = b.k === 'free' ? 0 : (bd.pend[b.k] || 0);
+        if (!b.showReq) {
+          return `${i > 0 ? '<div class="divider"></div>' : ''}
+          <div class="stat-row"><span class="label">${b.label}</span>
+            <span class="val"><b>${b.earned}</b>학점${pend ? ` <span style="color:var(--warn)">(예정 ${pend})</span>` : ''}</span></div>`;
+        }
+        const p = Math.min(100, Math.round(b.earned / b.req * 100));
         return `${i > 0 ? '<div class="divider"></div>' : ''}
         <div class="stat-row"><span class="label">${b.label}</span>
           <span class="val"><b>${b.earned}</b> / ${b.req}학점${pend ? ` <span style="color:var(--warn)">(예정 ${pend})</span>` : ''}</span></div>
         <div class="bar"><span class="${p >= 100 ? 'done' : ''}" style="width:${p}%"></span></div>`;
       }).join('')}
-      <div class="hint" style="margin-top:10px">자유 학점은 일반선택은 물론, 전공·교양을 더 들어도 채워져요. 필수는 전공 ${req.major}·교양 ${req.liberal}학점뿐!</div>
+      <div class="hint" style="margin-top:10px">일반 학점은 전공·교양을 필수치보다 더 들어도 함께 쌓여요. 필수는 전공 ${req.major}·교양 ${req.liberal}학점뿐!</div>
     </div>
 
     <div class="section-title">다가오는 일정</div>
@@ -1319,6 +1419,8 @@ function planModal(plan = null, preset = {}) {
   };
   nameInput.oninput = syncCert;
   if (!plan && p.name) syncCert();
+  nameInput.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#pm-credits').focus(); $('#pm-credits').select(); } };
+  $('#pm-credits').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#pm-save').click(); } };
 
   $('#pm-save').onclick = () => {
     const name = nameInput.value.trim();
@@ -1352,6 +1454,15 @@ function planModal(plan = null, preset = {}) {
   };
 }
 
+/* 로드맵 학기 카드에 쓸 실제 학기 라벨 (현재 학기 설정 기준) */
+function semesterLabel(i) {
+  const startFirst = S.profile.currentTerm !== 'second';
+  const isFirst = startFirst ? (i % 2 === 0) : (i % 2 === 1);
+  const yearOffset = startFirst ? Math.floor(i / 2) : Math.floor((i + 1) / 2);
+  const year = Number(todayStr().slice(0, 4)) + yearOffset;
+  return `${year}년 ${isFirst ? '1' : '2'}학기`;
+}
+
 /* ---------- 로드맵 ---------- */
 
 function viewRoadmap() {
@@ -1375,7 +1486,7 @@ function viewRoadmap() {
     return `
       <div class="card term-card">
         <div class="term-head">
-          <span class="t">${i + 1}학기</span>
+          <span class="t">${semesterLabel(i)} <span style="font-weight:400;color:var(--text-3);font-size:12px">(${i + 1}번째 학기)</span></span>
           <span class="d">${fmtYM(start)} – ${fmtYM(end)}</span>
         </div>
         ${S.roadmapMode === 'manual' ? `
@@ -1408,7 +1519,8 @@ function viewRoadmap() {
     </div>
 
     ${done ? `<div class="banner ok">${ICONS.check}<div>필요한 학점을 모두 채웠습니다! 학점인정 신청과 학위신청(${gi.applyLabel}) 일정을 확인하세요.</div></div>` : ''}
-    ${rm.warnings.map(w => `<div class="banner ${w.level}">${w.level === 'info' ? ICONS.info : ICONS.alert}<div>${esc(w.msg)}</div></div>`).join('')}
+    ${rm.warnings.map(w => warnCollapseHtml(w)).join('')}
+    ${rm.minBankTip ? tipHtml(rm.minBankTip) : ''}
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${S.plans.length ? '10px' : '0'}">
@@ -1442,25 +1554,6 @@ function viewRoadmap() {
         <button class="btn sm" data-sched-apply>${ICONS.plus} 학위신청, 일정에 추가</button>
       </div>
       <div class="footnote" style="margin-top:10px">예상 잔여 수수료: 학점인정 신청 약 ${(rm.needs.total * DATA.limits.fees.perCredit).toLocaleString()}원(남은 ${rm.needs.total}학점 × 1,000원) + 학습자 등록 4,000원(최초 1회, 이미 등록했다면 제외) + 교육기관 수강료 별도</div>
-    </div>
-
-    <div class="card" style="margin-top:10px">
-      <div style="font-size:13.5px;font-weight:600;margin-bottom:10px">예상 총비용 ${helpBtn('studyEnd') ? '' : ''}<span style="font-weight:400;color:var(--text-3)">— 내가 정한 수강료 기준</span></div>
-      ${(() => {
-        const courses = Math.ceil(rm.courseNeed / 3);
-        const per = S.tuition || 80000;
-        const tuitionCost = courses * per;
-        const feeCost = rm.needs.total * DATA.limits.fees.perCredit;
-        return `
-        <div class="stat-row"><span class="label">수강료</span><span class="val">과목 ${courses}개 × <b>${per.toLocaleString()}</b>원 = <b>${tuitionCost.toLocaleString()}</b>원</span></div>
-        <div class="stat-row"><span class="label">학점인정 수수료</span><span class="val">${rm.needs.total}학점 × 1,000원 = <b>${feeCost.toLocaleString()}</b>원</span></div>
-        <div class="stat-row"><span class="label">학습자 등록(최초 1회)</span><span class="val"><b>4,000</b>원</span></div>
-        <div class="divider"></div>
-        <div class="stat-row"><span class="label" style="font-size:14.5px">합계 (대략)</span><span class="val" style="font-size:15px"><b>${(tuitionCost + feeCost + 4000).toLocaleString()}원</b></span></div>
-        <div class="field" style="margin:12px 0 0"><label>과목(3학점)당 수강료 가정 — 기관마다 달라요</label>
-          <input type="number" id="rm-tuition" step="5000" min="0" value="${per}"></div>
-        <div class="hint">교육기관 수강료는 과목당 몇만~십몇만 원까지 다양해요. 견적을 받아본 뒤 이 값을 바꾸면 전체 계획 비용이 갱신돼요. 자격증 응시료·교재비는 별도.</div>`;
-      })()}
     </div>
 
     <div style="display:flex;gap:8px;margin-top:16px">
@@ -1530,8 +1623,6 @@ function bindRoadmap() {
     const gi = goalInfo();
     addAdminSchedule(`학위신청 (${gi.label} 수여)`, gi.applyStart, gi.applyEnd, '학점은행 홈페이지에서 온라인 신청만 가능 (방문·우편·팩스 불가)');
   };
-  const tu = $('#rm-tuition');
-  if (tu) tu.onchange = () => { S.tuition = Math.max(0, Number(tu.value) || 0); save(); render(); };
   const ap = $('[data-add-plan]');
   if (ap) ap.onclick = () => planModal();
   $$('[data-adopt-cert]').forEach(el => el.onclick = () => {
@@ -1616,8 +1707,6 @@ function viewCourses() {
     .filter(c => filter === 'all' || c.status === filter)
     .sort((a, b) => (a.status === 'done') - (b.status === 'done'));
 
-  const reqCourses = DATA.majorRequired[S.profile.major];
-
   return `
     <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
@@ -1648,14 +1737,7 @@ function viewCourses() {
           <button class="icon-btn" data-del-course="${c.id}">${ICONS.trash}</button>
         </div>
       </div>`).join('') : `
-      <div class="card empty">${ICONS.book}<div>등록된 과목이 없습니다.<br>수강할 과목을 추가해 보세요.</div></div>`}
-
-    ${reqCourses ? `
-      <div class="section-title">${esc(S.profile.major)} 전공필수 참고 (표준교육과정 예시)</div>
-      <div class="card" style="font-size:13.5px;color:var(--text-2);line-height:1.8">
-        ${reqCourses.map(esc).join(' · ')}
-        <div class="footnote" style="margin-top:8px">교육기관·연도에 따라 다를 수 있으니 표준교육과정을 확인하세요.</div>
-      </div>` : ''}`;
+      <div class="card empty">${ICONS.book}<div>등록된 과목이 없습니다.<br>수강할 과목을 추가해 보세요.</div></div>`}`;
 }
 
 function bindCourses() {
@@ -1681,7 +1763,12 @@ function courseModal(course = null) {
   let color = c.color || CAT_COLORS[c.category];
   openModal(`
     <h3>${course ? '과목 수정' : '과목 추가'}</h3>
-    <div class="field"><label>과목명</label><input type="text" id="cm-name" value="${esc(c.name)}" placeholder="예: 마케팅원론"></div>
+    <div class="field" id="cm-name-wrap"><label>과목명</label><input type="text" id="cm-name" value="${esc(c.name)}" placeholder="예: 마케팅원론"></div>
+    <div class="field" id="cm-unknown-wrap" style="display:${c.status === 'planned' ? 'block' : 'none'}">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="cm-unknown" style="width:16px;height:16px"> 아직 과목명을 몰라요 — 학점만 계획해 둘게요
+      </label>
+    </div>
     <div class="field"><label>구분</label>
       <div class="seg" id="cm-cat">
         ${Object.entries(CATS).map(([k, l]) => `<button data-cat="${k}" class="${c.category === k ? 'active' : ''}">${l}</button>`).join('')}
@@ -1719,9 +1806,18 @@ function courseModal(course = null) {
   $$('#cm-status button').forEach(b => b.onclick = () => {
     status = b.dataset.status;
     $$('#cm-status button').forEach(x => x.classList.toggle('active', x === b));
+    $('#cm-unknown-wrap').style.display = status === 'planned' ? 'block' : 'none';
+    if (status !== 'planned') { $('#cm-unknown').checked = false; syncUnknown(); }
   });
 
+  const syncUnknown = () => {
+    const on = $('#cm-unknown').checked;
+    $('#cm-name-wrap').style.display = on ? 'none' : 'block';
+  };
+  $('#cm-unknown').onchange = syncUnknown;
+
   const checkDup = () => {
+    if ($('#cm-unknown').checked) { $('#cm-dup').innerHTML = ''; return; }
     const name = $('#cm-name').value.trim();
     if (!name) { $('#cm-dup').innerHTML = ''; return; }
     const others = S.courses.filter(x => x.id !== c.id);
@@ -1736,11 +1832,14 @@ function courseModal(course = null) {
   checkDup();
 
   $('#cm-save').onclick = () => {
-    const name = $('#cm-name').value.trim();
-    if (!name) { toast('과목명을 입력해 주세요'); return; }
+    const unknown = $('#cm-unknown').checked;
+    const credits = Number($('#cm-credits').value);
+    let name = $('#cm-name').value.trim();
+    if (!name && !unknown) { toast('과목명을 입력해 주세요'); return; }
+    if (unknown) name = `${CATS[cat]} 계획 · 과목명 미정 (${credits}학점)`;
     const data = {
       name,
-      credits: Number($('#cm-credits').value),
+      credits,
       category: cat,
       required: cat === 'major' && $('#cm-req').checked,
       status,
@@ -2343,7 +2442,7 @@ function renderPaymentGate() {
   $('#sidebar').innerHTML = '';
   $('#tabbar').innerHTML = '';
   $('#view').innerHTML = `<div class="onboard" id="pay-gate">
-    <div class="intro-hero"><img src="icon-192.png" class="intro-logo-img" alt=""></div>
+    <div class="intro-hero"><img src="logo-mark.png" class="intro-logo-img" alt=""></div>
     <p class="sub" style="text-align:center">확인하고 있어요…</p>
   </div>`;
   loadPaymentGate();
@@ -2365,7 +2464,7 @@ async function loadPaymentGate() {
     const hrs = Math.max(0, Math.round((Date.now() - new Date(latest.created_at).getTime()) / 3600000));
     el.innerHTML = `
       <div class="intro-hero">
-        <img src="icon-192.png" class="intro-logo-img" alt="">
+        <img src="logo-mark.png" class="intro-logo-img" alt="">
         <h1 style="text-align:center">입금 확인 중이에요</h1>
         <p class="sub" style="text-align:center">‘${esc(latest.depositor)}’ 이름으로 확인 요청을 받았어요.<br>보통 <b>12시간 이내</b>에 확인 후 승인해 드려요.</p>
       </div>
@@ -2398,7 +2497,7 @@ function showDepositForm(el) {
   const ready = pc.bank && pc.account;
   el.innerHTML = `
     <div class="intro-hero">
-      <img src="icon-192.png" class="intro-logo-img" alt="">
+      <img src="logo-mark.png" class="intro-logo-img" alt="">
       <h1 style="text-align:center">이용을 시작하려면<br>결제가 필요해요</h1>
       <p class="sub" style="text-align:center">구독이 아니에요. 한 번만 결제하면 계속 쓸 수 있어요.</p>
     </div>
@@ -2457,6 +2556,14 @@ function authModal(mode = 'login') {
     <div class="hint" style="margin-top:6px">로그인은 <b>한 번만</b> 하면 이 기기에 계속 유지돼요.</div>`);
 
   $('#lm-switch').onclick = () => authModal(isLogin ? 'signup' : 'login');
+
+  // 입력 완료 후 Enter로 다음 칸(또는 제출)으로 자동 이동
+  const idEl = $('#lm-id'), pwEl = $('#lm-pw'), pw2El = $('#lm-pw2');
+  const onEnter = (el, next) => { if (el) el.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); next(); } }; };
+  onEnter(idEl, () => pwEl.focus());
+  onEnter(pwEl, () => pw2El ? pw2El.focus() : $('#lm-go').click());
+  onEnter(pw2El, () => $('#lm-go').click());
+  idEl.focus();
 
   $('#lm-go').onclick = async () => {
     const rawId = $('#lm-id').value.trim();
@@ -2817,6 +2924,13 @@ function viewProfile() {
         <input type="text" id="pf-major-custom" value="${esc(inList ? '' : p.major)}">
       </div>
       <div class="field"><label>시작일</label><input type="date" id="pf-start" value="${p.startDate}"></div>
+      <div class="field"><label>지금 듣고 있는 학기</label>
+        <div class="seg" id="pf-term">
+          <button data-term="first" class="${(p.currentTerm || 'first') === 'first' ? 'active' : ''}">1학기</button>
+          <button data-term="second" class="${p.currentTerm === 'second' ? 'active' : ''}">2학기</button>
+        </div>
+        <div class="hint">로드맵 학기 카드의 연도·학기 표시에 쓰여요.</div>
+      </div>
       <div class="field"><label>목표 학위수여 시점 <span style="font-weight:400;color:var(--text-3)">— 수여는 연 2회(2월·8월)</span></label>
         <select id="pf-goal">${opts.map(o => `<option value="${o.ym}" ${p.goalYm === o.ym ? 'selected' : ''}>${o.label} (${o.half} · 학위신청 ${o.applyLabel})</option>`).join('')}</select>
       </div>
@@ -2831,7 +2945,7 @@ function viewProfile() {
       <div class="field"><label>교양</label><input type="number" id="pf-p-liberal" min="0" value="${p.pending.liberal || 0}"></div>
       <div class="field"><label>일반선택</label><input type="number" id="pf-p-general" min="0" value="${p.pending.general || 0}">
         <div class="hint">다음 학점인정 신청 기간(${nextRecogLabel()})에 홈 화면 배너로 챙겨 드려요.</div></div>
-      <div class="field"><label>학점인정에 이미 사용한 자격증 수</label>
+      <div class="field"><label>학점인정에 이미 사용했거나, 합격했지만 아직 신청 안 한 자격증 수</label>
         <select id="pf-certs">${[0, 1, 2, 3].map(x => `<option value="${x}" ${p.certsUsed === x ? 'selected' : ''}>${x}개</option>`).join('')}</select>
       </div>
       <button class="btn primary full" id="pf-save">저장하고 로드맵 갱신</button>
@@ -2846,11 +2960,17 @@ function bindProfile() {
     S.profile.degree = $('#pf-degree').value;
     save(); render();
   };
+  let currentTerm = S.profile.currentTerm || 'first';
+  $$('#pf-term button').forEach(b => b.onclick = () => {
+    currentTerm = b.dataset.term;
+    $$('#pf-term button').forEach(x => x.classList.toggle('active', x === b));
+  });
   $('#pf-save').onclick = () => {
     const p = S.profile;
     p.degree = $('#pf-degree').value;
     p.major = sel.value === '__custom' ? ($('#pf-major-custom').value.trim() || p.major) : sel.value;
     p.startDate = $('#pf-start').value || p.startDate;
+    p.currentTerm = currentTerm;
     p.goalYm = $('#pf-goal').value;
     p.earned.major = Math.max(0, Number($('#pf-e-major').value) || 0);
     p.earned.liberal = Math.max(0, Number($('#pf-e-liberal').value) || 0);
@@ -2911,7 +3031,7 @@ function bindData() {
     if (!confirm('정말 모든 데이터를 삭제할까요? 되돌릴 수 없습니다.')) return;
     localStorage.removeItem(STORE_KEY);
     S = defaultState();
-    ob = { phase: 'auth', guideStep: 0, step: 0, degree: 'bachelor', major: '', earned: { major: 0, liberal: 0, general: 0 }, pending: { major: 0, liberal: 0, general: 0 }, certsUsed: 0, courses: [], plans: [], goalYm: null };
+    ob = { phase: 'auth', guideStep: 0, step: 0, degree: 'bachelor', major: '', currentTerm: 'first', earned: { major: 0, liberal: 0, general: 0 }, pending: { major: 0, liberal: 0, general: 0 }, certsUsed: 0, courses: [], plans: [], goalYm: null, certQ: '', dokhakStage: null, dokhakMajor: null };
     render();
   };
 }
