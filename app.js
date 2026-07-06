@@ -1234,8 +1234,10 @@ function planItem(p) {
         <div class="t">${esc(p.name)}</div>
         <div class="s">${PLAN_KINDS[p.kind] || '기타'} · +${p.credits}학점 · ${CATS[p.target]}${done ? (p.recognized ? ' · <b style="color:var(--ok)">인정 완료</b>' : ' · <b style="color:var(--ok)">학점 반영됨</b> · <span style="color:var(--warn)">인정 신청 대기</span>') : ' · 계획 중'}</div>
       </div>
-      <button class="icon-btn" data-edit-plan="${p.id}">${ICONS.edit}</button>
-      <button class="icon-btn" data-del-plan="${p.id}">${ICONS.trash}</button>
+      <div class="item-actions">
+        <button class="icon-btn" data-edit-plan="${p.id}">${ICONS.edit}</button>
+        <button class="icon-btn" data-del-plan="${p.id}">${ICONS.trash}</button>
+      </div>
     </div>`;
 }
 
@@ -1641,8 +1643,10 @@ function viewCourses() {
           <div class="t">${esc(c.name)}</div>
           <div class="s">${CATS[c.category]}${c.required ? ' · 전공필수' : ''} · ${c.credits}학점 · ${STATUS[c.status]}</div>
         </div>
-        <button class="icon-btn" data-edit-course="${c.id}">${ICONS.edit}</button>
-        <button class="icon-btn" data-del-course="${c.id}">${ICONS.trash}</button>
+        <div class="item-actions">
+          <button class="icon-btn" data-edit-course="${c.id}">${ICONS.edit}</button>
+          <button class="icon-btn" data-del-course="${c.id}">${ICONS.trash}</button>
+        </div>
       </div>`).join('') : `
       <div class="card empty">${ICONS.book}<div>등록된 과목이 없습니다.<br>수강할 과목을 추가해 보세요.</div></div>`}
 
@@ -1768,12 +1772,14 @@ function schedItem(s, opts = {}) {
         <div class="t">${esc(s.title)}</div>
         <div class="s">${type.label}${sub} · ${fmtRange(s)}${s.time ? ' ' + s.time : ''}${plan ? ` · ${esc(plan.name)}` : ''}</div>
       </div>
-      ${passChip || schedDday(s)}
-      ${passBtn}
-      ${opts.compact ? '' : `
-        <button class="icon-btn" data-alarm-sched="${s.id}" title="알림 ${s.alarm ? '켜짐' : '꺼짐'}" style="${s.alarm ? 'color:var(--accent)' : ''}">${s.alarm ? ICONS.bell : ICONS.bellOff}</button>
-        <button class="icon-btn" data-edit-sched="${s.id}">${ICONS.edit}</button>
-        <button class="icon-btn" data-del-sched="${s.id}">${ICONS.trash}</button>`}
+      <div class="item-actions">
+        ${passChip || schedDday(s)}
+        ${passBtn}
+        ${opts.compact ? '' : `
+          <button class="icon-btn" data-alarm-sched="${s.id}" title="알림 ${s.alarm ? '켜짐' : '꺼짐'}" style="${s.alarm ? 'color:var(--accent)' : ''}">${s.alarm ? ICONS.bell : ICONS.bellOff}</button>
+          <button class="icon-btn" data-edit-sched="${s.id}">${ICONS.edit}</button>
+          <button class="icon-btn" data-del-sched="${s.id}">${ICONS.trash}</button>`}
+      </div>
     </div>`;
 }
 
@@ -2177,8 +2183,10 @@ function viewCerts() {
         <div class="t">${esc(c.name)}</div>
         <div class="s">${esc(c.grade)} · ${isMajor ? '전공학점 인정' : '일반선택 인정 (전공 비연계)'}</div>
       </div>
-      <span class="chip ${isMajor ? 'accent' : ''}">+${c.credits}학점</span>
-      ${added ? `<span class="chip ok">계획됨</span>` : `<button class="btn sm" data-plan-cert="${esc(c.name)}">${ICONS.plus} 계획</button>`}
+      <div class="item-actions">
+        <span class="chip ${isMajor ? 'accent' : ''}">+${c.credits}학점</span>
+        ${added ? `<span class="chip ok">계획됨</span>` : `<button class="btn sm" data-plan-cert="${esc(c.name)}">${ICONS.plus} 계획</button>`}
+      </div>
     </div>`;
   };
 

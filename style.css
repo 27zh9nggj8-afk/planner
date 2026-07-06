@@ -390,8 +390,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 14px 16px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -399,10 +400,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 
 .item + .item { margin-top: 8px; }
-.item .grow { flex: 1; min-width: 0; }
-.item .t { font-weight: 600; font-size: 14.5px; }
+.item .grow { flex: 1 1 140px; min-width: 0; }
+.item .t { font-weight: 600; font-size: 14.5px; overflow-wrap: break-word; }
 .item .s { font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
 .item.done .t { text-decoration: line-through; color: var(--text-3); }
+
+/* 오른쪽 배지·버튼 묶음 — 자리가 부족하면 통째로 다음 줄로 */
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 
 .icon-btn {
   border: 0;
