@@ -488,11 +488,21 @@ function buildRoadmap() {
       msg: `${gi.label} 수여를 받으려면 수업을 ${fmtDate(gi.studyEnd, { day: false })}까지 이수해야 하는데, 남은 기간이 없습니다. 목표를 다음 수여 시점으로 변경해 주세요.`
     });
   }
+  // 자동 추천 자격증을 반영하기 '전'의 순수 수업 부족분 (숫자 왜곡 방지)
+  const certSupTotal = certs.reduce((sum, c) => sum + c.used, 0);
+  const courseNeedRaw = courseNeed + certSupTotal;          // 보충계획 반영 후, 자동추천 반영 전 필요 수업 학점
+  const capTotal = capacity(termCount);
+  const gapRaw = Math.max(0, courseNeedRaw - capTotal);     // 수업만으로 부족한 학점 (진짜 숫자)
   if (shortfall > 0 && termCount > 0) {
-    const minT = minTermsFor(courseNeed);
+    const minT = minTermsFor(courseNeedRaw);
     warnings.push({
       level: 'danger',
-      msg: `${gi.label} 수여 목표까지 수업만으로는 ${shortfall}학점이 부족합니다. 최소 ${minT}학기(약 ${minT * 6}개월)가 필요합니다. 자격증·독학학위제 시험을 보충 계획에 추가하거나(연 42학점 제한에 미포함), 목표 시점을 늦춰 주세요.${planSupTotal > 0 ? ` (직접 세우신 보충 계획 ${planSupTotal}학점은 이미 반영했습니다)` : ''}`
+      msg: `${gi.label} 수여 목표까지 수업으로는 최대 ${capTotal}학점만 인정돼요(학기 24·연 42학점 제한). 필요한 수업 ${courseNeedRaw}학점 중 ${gapRaw}학점이 부족합니다${certSupTotal > 0 ? ` — 추천 자격증 ${certSupTotal}학점을 병행해도 ${shortfall}학점이 모자라요` : ''}. 수업만으로 하려면 최소 ${minT}학기가 필요하니, 자격증·독학사 보충 계획을 늘리거나 목표 시점을 늦춰 주세요.${planSupTotal > 0 ? ` (직접 세우신 보충 계획 ${planSupTotal}학점은 이미 반영했어요)` : ''}`
+    });
+  } else if (gapRaw > 0 && termCount > 0) {
+    warnings.push({
+      level: 'warn',
+      msg: `수업만으로는 ${gapRaw}학점이 부족한 목표예요. 자동 추천 자격증 ${certSupTotal}학점을 병행하면 달성 가능합니다 — 아래 추천을 내 계획으로 확정해 두세요.`
     });
   } else if (planSupTotal > 0 && needs.total > 0 && termCount > 0) {
     warnings.push({
@@ -539,6 +549,7 @@ function renderNav() {
 }
 
 function render() {
+  if (needsPaymentGate()) { renderPaymentGate(); return; }
   if (!S.profile.done) { renderOnboarding(); return; }
   $('#app').classList.remove('onboarding');
   renderNav();
@@ -601,6 +612,7 @@ let ob = {
 const PLAN_STEPS = () => [obStep1, obStep2, obStep3, obStep4, obStep5, obStep6];
 
 function renderOnboarding() {
+  if (needsPaymentGate()) { renderPaymentGate(); return; }
   // 온보딩 동안은 사이드바를 숨기고 화면 정중앙에 (시선 분산 방지)
   $('#app').classList.add('onboarding');
   $('#sidebar').innerHTML = '';
@@ -639,7 +651,7 @@ function obAuth() {
       <div class="t">✨ 처음이에요</div>
       <div class="d">아이디·비밀번호만 만들면 바로 시작! 이메일 인증은 없어요.</div>
     </button>
-    <button class="btn full" data-auth-skip style="margin-top:6px;border:0;color:var(--text-3)">로그인 없이 시작하기 (이 기기에만 저장)</button>`;
+    <button class="btn full" data-quick-preview style="margin-top:6px;border:0;color:var(--text-3)">가입 전에 ⚡ 30초 미리보기부터 해볼래요</button>`;
 }
 
 /* --- 첫 화면: 초보자 / 바로 계획 분기 --- */
@@ -939,8 +951,6 @@ function bindOnboarding() {
   if (authLogin) authLogin.onclick = () => authModal('login');
   const authSignup = $('[data-auth-signup]');
   if (authSignup) authSignup.onclick = () => authModal('signup');
-  const authSkip = $('[data-auth-skip]');
-  if (authSkip) authSkip.onclick = () => { ob.phase = 'intro'; renderOnboarding(); };
 
   const qp = $('[data-quick-preview]');
   if (qp) qp.onclick = () => quickPreviewModal();
@@ -1114,10 +1124,13 @@ function viewHome() {
     .sort((a, b) => a.start.localeCompare(b.start))
     .slice(0, 4);
 
+  // 필수는 전공·교양뿐 — 나머지는 어느 구분으로든 채우면 되는 '자유 학점'
+  const freeReq = Math.max(0, req.total - req.major - req.liberal);
+  const freeEarned = Math.max(0, n.totalEarned - Math.min(n.earned.major, req.major) - Math.min(n.earned.liberal, req.liberal));
   const bars = [
-    { k: 'major', label: '전공', earned: n.earned.major, req: req.major },
-    { k: 'liberal', label: '교양', earned: n.earned.liberal, req: req.liberal },
-    { k: 'general', label: '일반선택', earned: n.earned.general, req: Math.max(0, req.total - req.major - req.liberal) }
+    { k: 'major', label: '전공 (필수)', earned: n.earned.major, req: req.major },
+    { k: 'liberal', label: '교양 (필수)', earned: n.earned.liberal, req: req.liberal },
+    { k: 'free', label: '자유 (구분 무관)', earned: freeEarned, req: freeReq }
   ].filter(b => b.req > 0);
 
   return `
@@ -1173,12 +1186,13 @@ function viewHome() {
     <div class="card">
       ${bars.map((b, i) => {
         const p = Math.min(100, Math.round(b.earned / b.req * 100));
-        const pend = bd.pend[b.k] || 0;
+        const pend = b.k === 'free' ? 0 : (bd.pend[b.k] || 0);
         return `${i > 0 ? '<div class="divider"></div>' : ''}
         <div class="stat-row"><span class="label">${b.label}</span>
           <span class="val"><b>${b.earned}</b> / ${b.req}학점${pend ? ` <span style="color:var(--warn)">(예정 ${pend})</span>` : ''}</span></div>
         <div class="bar"><span class="${p >= 100 ? 'done' : ''}" style="width:${p}%"></span></div>`;
       }).join('')}
+      <div class="hint" style="margin-top:10px">자유 학점은 일반선택은 물론, 전공·교양을 더 들어도 채워져요. 필수는 전공 ${req.major}·교양 ${req.liberal}학점뿐!</div>
     </div>
 
     <div class="section-title">다가오는 일정</div>
@@ -2119,7 +2133,7 @@ function viewMoreHome() {
       <div class="page-title">더보기</div>
     </div>
     <button class="link-row" data-sub="account">${ICONS.person}<span class="grow">로그인 · 클라우드 저장<span class="sub">${esc(acctSub)}</span></span></button>
-    <button class="link-row" data-sub="premium">${ICONS.award}<span class="grow">프리미엄${sbPremium ? ' <span class="chip ok" style="margin-left:4px">사용 중</span>' : ''}<span class="sub">${sbPremium ? '클라우드 저장·복원 이용 중 — 감사합니다!' : '클라우드 자동 저장 · 기기 동기화 (9,900원 · 1회)'}</span></span></button>
+    <button class="link-row" data-sub="premium">${ICONS.award}<span class="grow">결제 정보<span class="sub">결제 완료 · 자동 저장 중</span></span></button>
     <button class="link-row" data-sub="profile">${ICONS.edit}<span class="grow">목표 · 내 정보<span class="sub">학위 과정, 전공, 수여 시점, 보유 학점 수정</span></span></button>
     <button class="link-row" data-sub="certs">${ICONS.award}<span class="grow">보충 계획 · 자격증 추천<span class="sub">자격증·독학사로 기간 단축하기</span></span></button>
     <button class="link-row" data-sub="notif">${ICONS.bell}<span class="grow">알림 설정<span class="sub">강의 듣기 알림, 일정 알림</span></span></button>
@@ -2218,70 +2232,17 @@ function bindCerts() {
   });
 }
 
-/* --- 프리미엄 (1회 결제 · 링크 판매) --- */
-
-function premiumCfg() {
-  return (typeof CONFIG !== 'undefined' && CONFIG.PREMIUM) ? CONFIG.PREMIUM : { price: 9900, bank: '', account: '', holder: '' };
-}
+/* --- 결제 정보 (더보기 메뉴) — 여기 도달했다면 이미 결제 승인된 상태 --- */
 
 function viewPremium() {
-  const pc = premiumCfg();
-  const priceStr = (pc.price || 9900).toLocaleString();
-  if (sbPremium) {
-    return `
-      ${backBtn('프리미엄')}
-      <div class="banner ok">${ICONS.check}<div><b>프리미엄 사용 중이에요 — 감사합니다! 💙</b><br>모든 변경 사항이 클라우드에 자동 저장되고, 어떤 기기에서든 로그인하면 이어서 할 수 있어요.</div></div>`;
-  }
   return `
-    ${backBtn('프리미엄')}
-    <div class="card" style="text-align:center;padding:26px 18px">
-      <div style="font-size:34px;margin-bottom:6px">💎</div>
-      <div style="font-size:19px;font-weight:800">학점플래너 프리미엄</div>
-      <div style="font-size:26px;font-weight:800;margin:10px 0 2px">${priceStr}원 <small style="font-size:13px;font-weight:500;color:var(--text-2)">· 딱 한 번</small></div>
-      <div style="font-size:13px;color:var(--text-2)">구독 아니에요. 졸업할 때까지 쭉 쓰세요.</div>
-    </div>
-
-    <div class="card" style="margin-top:10px;font-size:14px;line-height:2">
-      ☁️ <b>클라우드 자동 저장</b> — 앱을 지워도, 기기를 바꿔도 계획이 안전해요<br>
-      🔄 <b>기기 동기화</b> — 폰에서 하던 걸 컴퓨터에서 이어서<br>
-      🔔 <b>서버 푸시 알림</b> — 준비 중, 나오면 추가 비용 없이 제공<br>
-      💬 <b>우선 지원</b> — 문의에 먼저 답해 드려요
-    </div>
-
-    ${!sbUser ? `
-      <div class="banner info" style="margin-top:10px">${ICONS.info}<div>프리미엄은 계정에 연결돼요. 먼저 로그인(무료)해 주세요.</div></div>
-      <button class="btn primary full" data-prem-login>로그인 · 계정 만들기</button>` : pc.bank && pc.account ? `
-      <div class="section-title">구매 방법 (계좌이체)</div>
-      <div class="card" style="font-size:14px;line-height:2">
-        ① 아래 계좌로 <b>${priceStr}원</b>을 보내주세요<br>
-        <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin:8px 0;font-weight:700">${esc(pc.bank)} ${esc(pc.account)}<br><span style="font-weight:500;font-size:13px;color:var(--text-2)">예금주: ${esc(pc.holder)}</span></div>
-        ② 아래에 <b>입금자명</b>을 적고 확인 요청을 눌러주세요<br>
-        ③ 확인되면 활성화돼요 (보통 몇 시간 이내) — 앱을 새로고침하면 적용!
-      </div>
-      <div class="field" style="margin-top:12px"><label>입금자명</label><input type="text" id="prem-depositor" placeholder="이체할 때 표시되는 이름"></div>
-      <button class="btn primary full" data-prem-request>${priceStr}원 입금했어요 — 확인 요청</button>
-      <div id="prem-req-status"></div>` : `
-      <div class="banner warn" style="margin-top:10px">${ICONS.alert}<div>판매 준비 중이에요 — 관리자가 config.js의 PREMIUM 계좌 정보를 채우면 구매 안내가 열립니다.</div></div>`}
-    <div class="footnote">내 계정: ${sbUser ? esc(emailToId(sbUser.email)) : '로그인 전'} · 결제 확인은 수동으로 진행되며, 문제가 있으면 데이터 관리의 백업 기능으로 언제든 계획을 옮길 수 있어요.</div>`;
+    ${backBtn('결제 정보')}
+    <div class="banner ok">${ICONS.check}<div><b>결제 완료 — 감사합니다! 💙</b><br>모든 변경 사항이 클라우드에 자동 저장되고, 어떤 기기에서든 로그인하면 이어서 할 수 있어요.</div></div>
+    <div class="footnote">계정: ${sbUser ? esc(emailToId(sbUser.email)) : ''} · 문제가 있으면 데이터 관리의 백업 기능으로 언제든 계획을 옮길 수 있어요.</div>`;
 }
 
 function bindPremium() {
   bindBack();
-  const pl = $('[data-prem-login]');
-  if (pl) pl.onclick = () => authModal('login');
-  const pr = $('[data-prem-request]');
-  if (pr) pr.onclick = async () => {
-    const depositor = $('#prem-depositor').value.trim();
-    if (!depositor) { toast('입금자명을 입력해 주세요'); return; }
-    await ensureCloud();
-    if (!sb || !sbUser) { toast('로그인이 필요해요'); return; }
-    const { error } = await sb.from('premium_requests').insert({
-      user_id: sbUser.id, username: emailToId(sbUser.email), depositor
-    });
-    if (error) { toast('요청 실패 — 잠시 후 다시 시도해 주세요'); return; }
-    $('#prem-req-status').innerHTML = `<div class="banner ok" style="margin-top:10px">${ICONS.check}<div>확인 요청을 보냈어요! 입금이 확인되면 활성화됩니다. 몇 시간 뒤 앱을 새로고침해 보세요.</div></div>`;
-    toast('확인 요청 완료!');
-  };
 }
 
 /* --- FAQ --- */
@@ -2314,13 +2275,18 @@ function viewGuideMore() {
 
 let sb = null;          // supabase 클라이언트
 let sbUser = null;      // 로그인한 사용자
-let sbPremium = false;  // 프리미엄(1회 결제) 활성 여부
+let sbPaid = false;     // 결제(1회) 승인 여부 — 모든 사용자에게 필수
 let syncInfo = '';      // 마지막 동기화 표시용
 let pushTimer = null;
 let cloudInitPromise = null;
 
 function cloudConfigured() {
   return typeof CONFIG !== 'undefined' && CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY;
+}
+
+/* 서버가 연결된 상태에서, 로그인은 했지만 결제 승인 전이면 앱 전체를 막는다 */
+function needsPaymentGate() {
+  return cloudConfigured() && location.protocol.startsWith('http') && !!sbUser && !sbPaid;
 }
 
 /* 아이디 기반 로그인: 내부적으로는 '아이디@cbp-user.app' 형태로 저장
@@ -2356,6 +2322,111 @@ function authErrorMsg(error, isLogin) {
 function ensureCloud() {
   if (!cloudInitPromise) cloudInitPromise = initCloud();
   return cloudInitPromise;
+}
+
+/* ---------- 결제 게이트 (모든 사용자 필수 · 로그인 다음 화면) ---------- */
+
+function paymentCfg() {
+  return (typeof CONFIG !== 'undefined' && CONFIG.PREMIUM) ? CONFIG.PREMIUM : { price: 9900, bank: '', account: '', holder: '' };
+}
+
+function renderPaymentGate() {
+  $('#app').classList.add('onboarding');
+  $('#sidebar').innerHTML = '';
+  $('#tabbar').innerHTML = '';
+  $('#view').innerHTML = `<div class="onboard" id="pay-gate">
+    <div class="intro-hero"><img src="icon-192.png" class="intro-logo-img" alt=""></div>
+    <p class="sub" style="text-align:center">확인하고 있어요…</p>
+  </div>`;
+  loadPaymentGate();
+}
+
+async function loadPaymentGate() {
+  const el = $('#pay-gate');
+  if (!el) return;
+  let latest = null;
+  try {
+    const { data } = await sb.from('premium_requests')
+      .select('depositor, created_at').eq('user_id', sbUser.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    latest = data;
+  } catch (e) { /* 요청 내역 없음으로 취급 */ }
+  if (!$('#pay-gate')) return; // 그 사이 화면이 바뀌었으면 중단
+
+  if (latest) {
+    const hrs = Math.max(0, Math.round((Date.now() - new Date(latest.created_at).getTime()) / 3600000));
+    el.innerHTML = `
+      <div class="intro-hero">
+        <img src="icon-192.png" class="intro-logo-img" alt="">
+        <h1 style="text-align:center">입금 확인 중이에요</h1>
+        <p class="sub" style="text-align:center">‘${esc(latest.depositor)}’ 이름으로 확인 요청을 받았어요.<br>보통 <b>12시간 이내</b>에 확인 후 승인해 드려요.</p>
+      </div>
+      <div class="card" style="text-align:center;font-size:13.5px;color:var(--text-2)">${hrs === 0 ? '방금' : hrs + '시간 전'} 요청함</div>
+      <button class="btn primary full" id="pg-refresh" style="margin-top:16px">승인됐는지 확인하기</button>
+      <button class="btn full" id="pg-resend" style="margin-top:8px;border:0;color:var(--text-3)">입금 정보를 다시 보낼게요</button>
+      <button class="btn full" id="pg-logout" style="margin-top:16px;border:0;color:var(--text-3)">로그아웃</button>`;
+    $('#pg-refresh').onclick = async () => {
+      toast('확인 중…');
+      await checkPaid();
+      if (sbPaid) {
+        await cloudPull(false);
+        if (!S.profile.done) ob.phase = 'intro';
+        render();
+        toast('결제가 확인됐어요! 환영합니다 🎉');
+      } else {
+        toast('아직 승인 전이에요 — 조금만 기다려 주세요');
+      }
+    };
+    $('#pg-resend').onclick = () => showDepositForm(el);
+    $('#pg-logout').onclick = payGateLogout;
+  } else {
+    showDepositForm(el);
+  }
+}
+
+function showDepositForm(el) {
+  const pc = paymentCfg();
+  const priceStr = (pc.price || 9900).toLocaleString();
+  const ready = pc.bank && pc.account;
+  el.innerHTML = `
+    <div class="intro-hero">
+      <img src="icon-192.png" class="intro-logo-img" alt="">
+      <h1 style="text-align:center">이용을 시작하려면<br>결제가 필요해요</h1>
+      <p class="sub" style="text-align:center">구독이 아니에요. 한 번만 결제하면 계속 쓸 수 있어요.</p>
+    </div>
+    <div class="card" style="text-align:center;padding:22px 18px">
+      <div style="font-size:26px;font-weight:800">${priceStr}원</div>
+      <div style="font-size:13px;color:var(--text-2);margin-top:4px">1회 결제 · 평생 이용</div>
+    </div>
+    ${ready ? `
+    <div class="card" style="margin-top:10px;font-size:14px;line-height:1.9">
+      아래 계좌로 입금해 주세요<br>
+      <div style="background:var(--bg);border-radius:10px;padding:12px 14px;margin:8px 0;font-weight:700">${esc(pc.bank)} ${esc(pc.account)}<br><span style="font-weight:500;font-size:13px;color:var(--text-2)">예금주: ${esc(pc.holder)}</span></div>
+      입금 후 아래에 입금자명을 적고 요청해 주세요. 보통 <b>12시간 이내</b>에 승인돼요.
+    </div>
+    <div class="field" style="margin-top:14px"><label>입금자명</label><input type="text" id="pg-depositor" placeholder="이체할 때 표시되는 이름"></div>
+    <button class="btn primary full" id="pg-submit">입금했어요 — 확인 요청</button>` : `
+    <div class="banner warn" style="margin-top:10px">${ICONS.alert}<div>결제 준비 중이에요. 잠시 후 다시 시도해 주세요.</div></div>`}
+    <button class="btn full" id="pg-logout2" style="margin-top:16px;border:0;color:var(--text-3)">로그아웃</button>`;
+  if (ready) {
+    $('#pg-submit').onclick = async () => {
+      const dep = $('#pg-depositor').value.trim();
+      if (!dep) { toast('입금자명을 입력해 주세요'); return; }
+      const { error } = await sb.from('premium_requests').insert({
+        user_id: sbUser.id, username: emailToId(sbUser.email), depositor: dep
+      });
+      if (error) { toast('요청 실패 — 잠시 후 다시 시도해 주세요'); return; }
+      toast('요청을 보냈어요!');
+      loadPaymentGate();
+    };
+  }
+  $('#pg-logout2').onclick = payGateLogout;
+}
+
+async function payGateLogout() {
+  try { await sb.auth.signOut(); } catch (e) { /* 무시 */ }
+  sbUser = null; sbPaid = false;
+  render();
 }
 
 /* 로그인 모달 (첫 화면 등 어디서든 사용)
@@ -2398,18 +2469,20 @@ function authModal(mode = 'login') {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (error) { toast(authErrorMsg(error, true)); return; }
       closeModal();
-      await checkPremium();
-      await cloudPull(false);
-      if (S.profile.done) { render(); toast(sbPremium ? '돌아오신 걸 환영해요! 계획을 불러왔어요 🎉' : '돌아오신 걸 환영해요!'); }
-      else { ob.phase = 'intro'; renderOnboarding(); toast('로그인했어요! 이제 계획을 만들어 볼까요?'); }
+      await checkPaid();
+      if (sbPaid) await cloudPull(false);
+      if (!S.profile.done && !needsPaymentGate()) ob.phase = 'intro';
+      render();
+      toast(sbPaid ? '돌아오신 걸 환영해요! 🎉' : '로그인했어요! 이용을 시작하려면 결제가 필요해요');
     } else {
       const { data, error } = await sb.auth.signUp({ email, password });
       if (error) { toast(authErrorMsg(error, false)); return; }
       if (data.session) {
         closeModal();
-        if (!S.profile.done) { ob.phase = 'intro'; renderOnboarding(); }
-        else render();
-        toast(`${emailToId(email)}님, 환영해요! 이제 계획을 만들어 볼까요? 🎉`);
+        await checkPaid();
+        if (!S.profile.done && !needsPaymentGate()) ob.phase = 'intro';
+        render();
+        toast(`${emailToId(email)}님, 가입 완료! 이용을 시작하려면 결제가 필요해요.`);
       } else {
         // 서버에 이메일 인증이 켜져 있으면 아이디 방식이 동작하지 않음 (관리자 설정 필요)
         toast('서버 설정 문제로 가입이 완료되지 않았어요 — Supabase에서 Confirm email을 꺼주세요');
@@ -2426,30 +2499,32 @@ async function initCloud() {
     sb = mod.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
     const { data } = await sb.auth.getSession();
     sbUser = data.session ? data.session.user : null;
-    if (sbUser) await checkPremium();
     sb.auth.onAuthStateChange((_ev, session) => {
       sbUser = session ? session.user : null;
       if (S.ui.tab === 'more') render();
     });
-    if (sbUser) await cloudPull(false);
-    // 이미 로그인된 상태로 온보딩 첫 화면에 있다면 로그인 화면을 건너뜀
-    if (sbUser && !S.profile.done && ob.phase === 'auth') { ob.phase = 'intro'; renderOnboarding(); }
+    if (sbUser) {
+      await checkPaid();
+      if (sbPaid) await cloudPull(false);
+      if (!S.profile.done && !needsPaymentGate()) ob.phase = 'intro';
+      render();
+    }
   } catch (e) {
     console.warn('클라우드 초기화 실패', e);
   }
 }
 
-/* 프리미엄 여부 확인 (premium_users 테이블) */
-async function checkPremium() {
-  if (!sb || !sbUser) { sbPremium = false; return; }
+/* 결제 승인 여부 확인 (premium_users 테이블 — 승인된 사용자만 여기 존재) */
+async function checkPaid() {
+  if (!sb || !sbUser) { sbPaid = false; return; }
   try {
     const { data } = await sb.from('premium_users').select('user_id').eq('user_id', sbUser.id).maybeSingle();
-    sbPremium = !!data;
-  } catch (e) { sbPremium = false; }
+    sbPaid = !!data;
+  } catch (e) { sbPaid = false; }
 }
 
 function scheduleCloudPush() {
-  if (!sb || !sbUser || !sbPremium) return;   // 클라우드 자동 저장은 프리미엄 기능
+  if (!sb || !sbUser || !sbPaid) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(cloudPush, 1500);
 }
@@ -2473,8 +2548,8 @@ async function cloudPush() {
 /* 클라우드에서 불러오기. interactive=true면 덮어쓰기 전에 확인 */
 async function cloudPull(interactive = true) {
   if (!sb || !sbUser) return;
-  if (!sbPremium) {
-    if (interactive) { toast('클라우드 저장·복원은 프리미엄 기능이에요'); go('more', 'premium'); }
+  if (!sbPaid) {
+    if (interactive) toast('결제 승인 후 이용할 수 있어요');
     return;
   }
   try {
@@ -2533,8 +2608,7 @@ function viewAccount() {
   }
   return `
     ${backBtn('로그인 · 클라우드 저장')}
-    <div class="banner ok">${ICONS.check}<div><b>${esc(emailToId(sbUser.email))}</b>님으로 로그인됨${sbPremium ? ' — 변경 사항이 자동으로 클라우드에 저장돼요. 💎' : ''}${syncInfo ? `<br><span style="opacity:.8">${esc(syncInfo)}</span>` : ''}</div></div>
-    ${sbPremium ? '' : `<div class="banner info">${ICONS.info}<div>클라우드 자동 저장·복원은 <b>프리미엄</b>에서 켜져요. <span role="button" style="text-decoration:underline;cursor:pointer" data-go-premium>자세히 보기</span></div></div>`}
+    <div class="banner ok">${ICONS.check}<div><b>${esc(emailToId(sbUser.email))}</b>님으로 로그인됨 — 변경 사항이 자동으로 클라우드에 저장돼요.${syncInfo ? `<br><span style="opacity:.8">${esc(syncInfo)}</span>` : ''}</div></div>
     <button class="link-row" id="ac-push">${ICONS.upload}<span class="grow">지금 클라우드에 저장<span class="sub">이 기기의 데이터를 업로드</span></span></button>
     <button class="link-row" id="ac-pull">${ICONS.download}<span class="grow">클라우드에서 불러오기<span class="sub">이 기기의 데이터를 덮어씁니다</span></span></button>
     <button class="link-row" id="ac-logout" style="color:var(--danger)">${ICONS.person}<span class="grow">로그아웃<span class="sub">이 기기의 데이터는 그대로 남아요</span></span></button>`;
@@ -2542,8 +2616,6 @@ function viewAccount() {
 
 function bindAccount() {
   bindBack();
-  const gp = $('[data-go-premium]');
-  if (gp) gp.onclick = () => go('more', 'premium');
   const login = $('#ac-login');
   if (login) login.onclick = () => authModal('login');
   const signup = $('#ac-signup');
@@ -2555,7 +2627,7 @@ function bindAccount() {
   const logout = $('#ac-logout');
   if (logout) logout.onclick = async () => {
     await sb.auth.signOut();
-    sbUser = null;
+    sbUser = null; sbPaid = false;
     render(); toast('로그아웃되었습니다');
   };
 }
@@ -2574,7 +2646,7 @@ function viewNotif() {
     <div class="banner info">${ICONS.info}<div><b>알림이 안 와요?</b> 체크리스트 ↓<br>
       ① 위 권한이 ‘허용됨’인지 + <b>macOS/휴대폰 시스템 설정에서 브라우저 알림</b>이 켜져 있는지 (Mac: 시스템 설정 → 알림 → 사용 중인 브라우저)<br>
       ② 앱을 <b>홈 화면에 추가(PWA 설치)</b>하면 훨씬 안정적으로 와요 — iPhone: Safari 공유 → 홈 화면에 추가 / Mac Chrome: 주소창 설치 아이콘<br>
-      ③ 현재는 앱(또는 브라우저)이 실행 중일 때 울리는 방식이에요. <b>기기가 꺼져 있어도 오는 서버 푸시</b>는 로그인 서버(config.js) 연결 후 푸시 서버를 붙이면 가능해요 — 정식 출시 단계에서 함께 세팅하는 걸 추천해요.</div></div>
+      ③ 위 알림은 앱(또는 브라우저)이 실행 중일 때만 울려요. <b>기기가 꺼져 있어도 오는 알림</b>은 아래 ‘서버 푸시 알림’에서 켤 수 있어요.</div></div>
 
     ${permission !== 'granted' && permission !== 'unsupported' ? `<button class="btn primary full" data-perm style="margin-bottom:14px">알림 허용하기</button>` : ''}
 
@@ -2609,7 +2681,7 @@ function viewNotif() {
       <div class="hint" style="margin-top:8px">기간 일정은 시작 전날·당일과 마감일 당일에 알려 드려요.</div>
     </div>
 
-    <div class="section-title">서버 푸시 알림 💎 <span style="font-weight:400">— 앱이 꺼져 있어도 매일 아침 8:50에 그날 일정 알림</span></div>
+    <div class="section-title">서버 푸시 알림 <span style="font-weight:400">— 앱이 꺼져 있어도 매일 아침 8:50에 그날 일정 알림</span></div>
     <div class="card" id="push-sec" style="font-size:13.5px;color:var(--text-2)">확인 중…</div>
 
     <button class="btn full" data-test-notif style="margin-top:14px">${ICONS.bell} 알림 테스트</button>`;
@@ -2634,14 +2706,8 @@ async function renderPushSec() {
   }
   if (!cloudConfigured()) { el.innerHTML = '서버 연결 후 사용할 수 있어요.'; return; }
   await ensureCloud();
-  if (!sbUser) {
-    el.innerHTML = `로그인하면 사용할 수 있어요. <button class="btn sm" id="push-login" style="margin-left:6px">로그인</button>`;
-    const b = $('#push-login'); if (b) b.onclick = () => authModal('login');
-    return;
-  }
-  if (!sbPremium) {
-    el.innerHTML = `기기가 꺼져 있어도 아침마다 그날의 시험·과제·마감을 알려드리는 <b>프리미엄</b> 기능이에요. <button class="btn sm" id="push-prem" style="margin-left:6px">프리미엄 보기</button>`;
-    const b = $('#push-prem'); if (b) b.onclick = () => go('more', 'premium');
+  if (!sbUser || !sbPaid) {
+    el.innerHTML = `로그인 후 이용할 수 있어요.`;
     return;
   }
   try {
