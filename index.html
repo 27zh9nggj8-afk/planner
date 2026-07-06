@@ -193,8 +193,8 @@
   .result-mock:first-of-type { border-top: none; }
 
   /* ---------- pricing ---------- */
-  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 720px; margin: 0 auto; }
-  @media (max-width: 620px) { .pricing-grid { grid-template-columns: 1fr; } }
+  .pricing-grid { display: flex; justify-content: center; max-width: 720px; margin: 0 auto; }
+  .pricing-grid .price-card { width: 100%; max-width: 360px; }
   .price-card {
     background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 32px 28px; box-shadow: var(--card-shadow);
@@ -250,7 +250,7 @@
   <h1>학점은행제,<br>이제 계획대로.</h1>
   <p class="sub">남은 학점과 졸업 시점을 한눈에. 수업·자격증·독학사 계획을<br class="br-desktop"> 학점플래너 하나로 관리하세요.</p>
   <div class="hero-ctas">
-    <a class="btn-primary" href="app/" id="cta-start">무료로 시작하기 →</a>
+    <a class="btn-primary" href="app/" id="cta-start">9,900원으로 시작하기 →</a>
     <a class="btn-secondary" href="#features">더 알아보기</a>
   </div>
 
@@ -299,9 +299,9 @@
         <p>이름이 비슷한 과목을 자동으로 감지해 중복·대체 과목으로 인한 손해를 미리 막아요.</p>
       </div>
       <div class="feature-card reveal">
-        <div class="icon">🔒</div>
-        <h3>내 기기에 안전하게</h3>
-        <p>기본은 이 기기에만 저장. 필요하면 로그인해서 여러 기기로 이어갈 수 있어요.</p>
+        <div class="icon">☁️</div>
+        <h3>클라우드 자동 저장</h3>
+        <p>가입하면 계획이 자동으로 클라우드에 저장돼요. 기기를 바꿔도, 앱을 지웠다 깔아도 그대로 이어집니다.</p>
       </div>
     </div>
   </div>
@@ -361,27 +361,18 @@
 <section>
   <div class="wrap">
     <div class="eyebrow reveal">PRICING</div>
-    <h2 class="section-title reveal">부담 없이 시작하세요</h2>
-    <p class="section-sub reveal">평생 쓸 계획이니, 가격도 가볍게 갔어요.</p>
+    <h2 class="section-title reveal">단 한 번 결제로, 평생 이용</h2>
+    <p class="section-sub reveal">무료 체험 없이, 딱 한 번 9,900원만 내면 모든 기능을 계속 쓸 수 있어요.</p>
 
     <div class="pricing-grid">
-      <div class="price-card reveal">
-        <h4>무료</h4>
-        <div class="amount">0원</div>
+      <div class="price-card highlight reveal">
+        <span class="badge">평생 1회 결제</span>
+        <h4>학점플래너 전체 이용권</h4>
+        <div class="amount">9,900원 <small>· 평생 1회</small></div>
         <ul>
           <li>로드맵·과목·일정 등 모든 계획 기능</li>
           <li>자격증·독학사 검색 및 계획</li>
-          <li>이 기기에 안전하게 저장</li>
-        </ul>
-      </div>
-      <div class="price-card highlight reveal">
-        <span class="badge">추천</span>
-        <h4>프리미엄</h4>
-        <div class="amount">9,900원 <small>· 평생 1회</small></div>
-        <ul>
-          <li>무료 기능 모두 포함</li>
-          <li>클라우드 자동 저장</li>
-          <li>여러 기기에서 이어서 계획</li>
+          <li>클라우드 자동 저장 · 여러 기기에서 이어서 계획</li>
         </ul>
       </div>
     </div>
@@ -410,15 +401,6 @@
 
 <script>
   document.getElementById('year').textContent = new Date().getFullYear();
-
-  // 이미 계획을 시작한 방문자는 CTA 문구를 바꿔 이어서 하도록 유도
-  try {
-    if (localStorage.getItem('cbp_state_v1')) {
-      document.querySelectorAll('#nav-cta, #cta-start').forEach(el => {
-        el.textContent = el.id === 'nav-cta' ? '이어서 하기' : '이어서 계획하기 →';
-      });
-    }
-  } catch (e) {}
 
   const io = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });

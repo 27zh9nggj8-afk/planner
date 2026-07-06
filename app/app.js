@@ -607,7 +607,7 @@ let ob = {
   pending: { major: 0, liberal: 0, general: 0 },
   certsUsed: 0,
   courses: [], plans: [], goalYm: null,
-  certQ: '', dokhakStage: null, dokhakMajor: null
+  certQ: '', dokhakStage: null, dokhakMajor: null, showRelated: false, roadmapMode: 'auto'
 };
 
 const PLAN_STEPS = () => [obStep1, obStep2, obStep3, obStep4, obStep5, obStep6];
@@ -803,12 +803,17 @@ const DOKHAK_STAGE = {
   4: { label: '4단계 · 학위취득 종합시험', perCredit: 0, target: 'major' }
 };
 
-function obStep5() {
+/* obStep5의 검색/추천 결과 영역 — 타이핑 중 IME 조합이 끊기지 않도록
+   이 부분만 따로 렌더링해서, 검색창 자체는 다시 그리지 않는다 */
+function obCertResultsHtml() {
   const limit = DATA.degrees[ob.degree].certLimit;
   const slotsLeft = Math.max(0, limit - ob.certsUsed - ob.plans.filter(p => p.kind === 'cert').length);
   const q = (ob.certQ || '').trim();
   const isDokhakQuery = /독학/.test(q);
+  return ob.dokhakStage ? obDokhakPicker() : (q ? obCertSearchResults(q, isDokhakQuery) : (ob.showRelated ? obCertRelated(slotsLeft) : obCertDefault()));
+}
 
+function obStep5() {
   return `
     <h1>준비 중인 자격증이나<br>독학사 시험이 있나요? ${helpBtn('plans')}</h1>
     <p class="sub">자격증·독학학위제 시험 학점은 <b>연 42학점 제한에 포함되지 않아</b> 기간 단축의 핵심이에요. 계획에 넣어두면 로드맵이 그만큼 여유 있게 계산됩니다. 없으면 건너뛰어도 돼요.</p>
@@ -826,7 +831,7 @@ function obStep5() {
       <input type="text" id="ob-cert-search" value="${esc(ob.certQ || '')}" placeholder="예: 조리, SMAT, 컴활, 독학사">
     </div>
 
-    ${ob.dokhakStage ? obDokhakPicker() : (q ? obCertSearchResults(q, isDokhakQuery) : obCertRelated(slotsLeft))}
+    <div id="ob-cert-results">${obCertResultsHtml()}</div>
 
     <div class="mini-form">
       <div class="field"><label>직접 추가 (검색에 없는 자격증 · 기타)</label>
@@ -848,6 +853,14 @@ function obStep5() {
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-next>${ob.plans.length ? '다음' : '지금은 없어요, 다음'}</button>
     </div>`;
+}
+
+/* 검색어도 없고, 추천도 아직 안 열었을 때: 검색만 유도 */
+function obCertDefault() {
+  return `
+    <div class="hint" style="margin-top:-8px;margin-bottom:14px">자격증·독학사 이름으로 검색해서 담아보세요.</div>
+    <button class="btn full" data-ob-show-related style="margin-top:8px">✨ 아직 계획이 없어요, 추천해주세요</button>
+    <button class="btn full" data-dokhak-open style="margin-top:8px">🎓 독학사 시험 찾기</button>`;
 }
 
 /* 검색어가 없을 때: 내 전공과 연계된 자격증 추천 */
@@ -973,11 +986,51 @@ function obStep6() {
           ${gi.ym === recommended ? '<span class="goal-tag ok" style="margin-left:6px">추천</span>' : ''}
         </button>`).join('')}
     </div>
+
+    <div class="field" style="margin-top:20px">
+      <label>학기별 학점 배분 ${helpBtn('roadmapMode')}</label>
+      <div class="seg" id="ob-roadmap-mode">
+        <button data-rmode="auto" class="${(ob.roadmapMode || 'auto') === 'auto' ? 'active' : ''}">자동 추천</button>
+        <button data-rmode="manual" class="${ob.roadmapMode === 'manual' ? 'active' : ''}">처음부터 직접 설정</button>
+      </div>
+      <div class="hint">직접 설정을 고르면, 로드맵 화면에서 학기마다 들을 학점을 스스로 정할 수 있어요. 나중에 언제든 바꿀 수 있어요.</div>
+    </div>
+
     <div style="margin-top:28px;display:flex;gap:8px">
       <button class="btn" data-prev>이전</button>
       <button class="btn primary" style="flex:1" data-finish>로드맵 만들기</button>
     </div>
     <div class="footnote">본 앱의 계산은 공식 고시·공개 자료 기반의 참고용 계획이에요. 학점인정 여부의 최종 확인은 국가평생교육진흥원(www.cb.or.kr · ☎ 1600-0400)에서 해주세요.</div>`;
+}
+
+/* #ob-cert-results 안의 버튼들(자격증 담기/빼기, 추천 열기, 독학사 진입)을 바인딩.
+   검색 결과만 갱신될 때도 다시 호출해야 새로 그려진 버튼에 이벤트가 붙는다 */
+function bindObCertResults() {
+  $$('[data-ob-cert]').forEach(b => b.onclick = () => {
+    const name = b.dataset.obCert;
+    const idx = ob.plans.findIndex(p => p.name === name);
+    if (idx >= 0) { ob.plans.splice(idx, 1); renderOnboarding(); return; }
+    const limit = DATA.degrees[ob.degree].certLimit;
+    if (ob.certsUsed + ob.plans.filter(p => p.kind === 'cert').length >= limit) {
+      toast(`자격증 학점인정은 최대 ${limit}개까지예요`); return;
+    }
+    const cert = DATA.certs.find(c => c.name === name);
+    const target = cert.majors.includes(ob.major) ? 'major' : 'general';
+    if (target === 'general' && ob.plans.some(p => p.kind === 'cert' && p.target === 'general')) {
+      toast('전공과 무관한 자격증은 1개까지만 일반선택으로 인정돼요'); return;
+    }
+    ob.plans.push({ kind: 'cert', name: cert.name, credits: cert.credits, target, status: 'planning' });
+    renderOnboarding();
+    toast(`'${cert.name}' 계획에 추가했어요`);
+  });
+  const showRelated = $('[data-ob-show-related]');
+  if (showRelated) showRelated.onclick = () => {
+    ob.showRelated = true;
+    const results = $('#ob-cert-results');
+    if (results) { results.innerHTML = obCertResultsHtml(); bindObCertResults(); }
+  };
+  const dokhakOpen = $('[data-dokhak-open]');
+  if (dokhakOpen) dokhakOpen.onclick = () => { ob.dokhakStage = 'select'; renderOnboarding(); };
 }
 
 function bindOnboarding() {
@@ -1015,6 +1068,10 @@ function bindOnboarding() {
 
   $$('[data-degree]').forEach(b => b.onclick = () => { ob.degree = b.dataset.degree; renderOnboarding(); });
   $$('[data-goal]').forEach(b => b.onclick = () => { ob.goalYm = b.dataset.goal; renderOnboarding(); });
+  $$('#ob-roadmap-mode button').forEach(b => b.onclick = () => {
+    ob.roadmapMode = b.dataset.rmode;
+    $$('#ob-roadmap-mode button').forEach(x => x.classList.toggle('active', x === b));
+  });
   const majorSel = $('#ob-major');
   if (majorSel) majorSel.onchange = () => {
     $('#ob-custom-wrap').style.display = majorSel.value === '__custom' ? 'block' : 'none';
@@ -1045,34 +1102,24 @@ function bindOnboarding() {
   const obcName = $('#ob-c-name');
   if (obcName) obcName.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addCourse.click(); } };
 
-  // 자격증 검색/추천 토글
-  $$('[data-ob-cert]').forEach(b => b.onclick = () => {
-    const name = b.dataset.obCert;
-    const idx = ob.plans.findIndex(p => p.name === name);
-    if (idx >= 0) { ob.plans.splice(idx, 1); renderOnboarding(); return; }
-    const limit = DATA.degrees[ob.degree].certLimit;
-    if (ob.certsUsed + ob.plans.filter(p => p.kind === 'cert').length >= limit) {
-      toast(`자격증 학점인정은 최대 ${limit}개까지예요`); return;
-    }
-    const cert = DATA.certs.find(c => c.name === name);
-    const target = cert.majors.includes(ob.major) ? 'major' : 'general';
-    if (target === 'general' && ob.plans.some(p => p.kind === 'cert' && p.target === 'general')) {
-      toast('전공과 무관한 자격증은 1개까지만 일반선택으로 인정돼요'); return;
-    }
-    ob.plans.push({ kind: 'cert', name: cert.name, credits: cert.credits, target, status: 'planning' });
-    renderOnboarding();
-    toast(`'${cert.name}' 계획에 추가했어요`);
-  });
+  // 자격증 검색/추천 토글 + 독학사 진입 (검색 결과 영역 안의 버튼들)
+  bindObCertResults();
 
-  // 자격증 검색창
+  // 자격증 검색창 — 입력할 때마다 결과 영역만 갱신(검색창 자체는 다시 그리지 않아
+  // 한글 조합 중 커서가 튀거나 글자가 뒤섞이는 문제를 막는다)
   const certSearch = $('#ob-cert-search');
   if (certSearch) {
-    const runSearch = () => { ob.certQ = certSearch.value; ob.dokhakStage = null; renderOnboarding(); const el = $('#ob-cert-search'); if (el) el.focus(); };
-    certSearch.onchange = runSearch;
-    certSearch.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } };
+    let searchTimer;
+    certSearch.oninput = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        ob.certQ = certSearch.value;
+        ob.dokhakStage = null;
+        const results = $('#ob-cert-results');
+        if (results) { results.innerHTML = obCertResultsHtml(); bindObCertResults(); }
+      }, 150);
+    };
   }
-  const dokhakOpen = $('[data-dokhak-open]');
-  if (dokhakOpen) dokhakOpen.onclick = () => { ob.dokhakStage = 'select'; renderOnboarding(); };
   const dokhakBack = $('[data-dokhak-back]');
   if (dokhakBack) dokhakBack.onclick = () => {
     ob.dokhakStage = ob.dokhakStage === 'select' ? null : 'select';
@@ -1165,11 +1212,11 @@ function bindOnboarding() {
     };
     S.courses = ob.courses.map(c => ({ id: uid(), color: CAT_COLORS[c.category], ...c }));
     S.plans = ob.plans.map(p => ({ id: uid(), ...p }));
-    S.roadmapMode = 'auto';
-    S.manualTerms = null;
+    S.roadmapMode = ob.roadmapMode === 'manual' ? 'manual' : 'auto';
+    S.manualTerms = S.roadmapMode === 'manual' ? buildRoadmapAutoTotals() : null;
     save();
     go('roadmap');
-    toast('로드맵이 생성되었습니다 🎉');
+    toast(S.roadmapMode === 'manual' ? '학기별 학점을 직접 조정해 보세요 🎉' : '로드맵이 생성되었습니다 🎉');
   };
 }
 
@@ -2266,28 +2313,43 @@ function bindBack() {
 
 /* --- 보충 계획 · 자격증 추천 --- */
 
-function viewCerts() {
-  const slot = certSlotInfo();
+function certRow(c, isMajor) {
+  const added = S.plans.some(p => p.name === c.name);
+  return `
+  <div class="item">
+    <div class="grow">
+      <div class="t">${esc(c.name)}</div>
+      <div class="s">${esc(c.grade)} · ${isMajor ? '전공학점 인정' : '일반선택 인정 (전공 비연계)'}</div>
+    </div>
+    <div class="item-actions">
+      <span class="chip ${isMajor ? 'accent' : ''}">+${c.credits}학점</span>
+      ${added ? `<span class="chip ok">계획됨</span>` : `<button class="btn sm" data-plan-cert="${esc(c.name)}">${ICONS.plus} 계획</button>`}
+    </div>
+  </div>`;
+}
+
+/* 검색 결과 영역만 — 검색창은 다시 그리지 않도록 별도 함수로 분리 */
+function certListResultsHtml() {
   const q = (S.ui.certQ || '').trim();
   const match = c => !q || c.name.toLowerCase().includes(q.toLowerCase());
   const related = DATA.certs.filter(c => c.majors.includes(S.profile.major) && match(c));
   const othersAll = DATA.certs.filter(c => !c.majors.includes(S.profile.major) && match(c));
   const others = othersAll.slice(0, q ? 60 : 20);
+  return `
+    ${related.length ? `
+      <div class="section-title">${esc(S.profile.major)} 전공학점으로 인정 (제28차 고시 기준)</div>
+      ${related.map(c => certRow(c, true)).join('')}` : `
+      <div class="section-title">전공 관련</div>
+      <div class="card empty"><div>‘${esc(S.profile.major)}’ 전공과 자동 매칭되는 자격증 정보가 없습니다.<br>학점은행 홈페이지의 ‘자격 검색’에서 확인해 보세요.</div></div>`}
 
-  const certRow = (c, isMajor) => {
-    const added = S.plans.some(p => p.name === c.name);
-    return `
-    <div class="item">
-      <div class="grow">
-        <div class="t">${esc(c.name)}</div>
-        <div class="s">${esc(c.grade)} · ${isMajor ? '전공학점 인정' : '일반선택 인정 (전공 비연계)'}</div>
-      </div>
-      <div class="item-actions">
-        <span class="chip ${isMajor ? 'accent' : ''}">+${c.credits}학점</span>
-        ${added ? `<span class="chip ok">계획됨</span>` : `<button class="btn sm" data-plan-cert="${esc(c.name)}">${ICONS.plus} 계획</button>`}
-      </div>
-    </div>`;
-  };
+    <div class="section-title">전체 자격 검색 — 제28차 고시 ${DATA.certs.length}개 수록</div>
+    ${others.map(c => certRow(c, c.majors.includes(S.profile.major))).join('')}
+    ${othersAll.length > others.length ? `<div class="footnote">${othersAll.length - others.length}개 더 있어요 — 검색어를 입력해 좁혀 보세요.</div>` : ''}`;
+}
+
+function viewCerts() {
+  const slot = certSlotInfo();
+  const q = (S.ui.certQ || '').trim();
 
   return `
     ${backBtn('보충 계획 · 자격증')}
@@ -2300,35 +2362,18 @@ function viewCerts() {
     ${S.plans.length ? S.plans.map(planItem).join('') : `
       <div class="card empty" style="padding:24px">${ICONS.award}<div>아직 계획이 없어요.<br>아래 추천에서 고르거나 직접 추가해 보세요.</div></div>`}
 
-    ${related.length ? `
-      <div class="section-title">${esc(S.profile.major)} 전공학점으로 인정 (제28차 고시 기준)</div>
-      ${related.map(c => certRow(c, true)).join('')}` : `
-      <div class="section-title">전공 관련</div>
-      <div class="card empty"><div>‘${esc(S.profile.major)}’ 전공과 자동 매칭되는 자격증 정보가 없습니다.<br>학점은행 홈페이지의 ‘자격 검색’에서 확인해 보세요.</div></div>`}
-
-    <div class="section-title">전체 자격 검색 — 제28차 고시 ${DATA.certs.length}개 수록</div>
-    <div class="field" style="margin-bottom:10px">
+    <div class="field" style="margin:18px 0 10px">
+      <label>자격증 검색</label>
       <input type="text" id="cert-q" value="${esc(q)}" placeholder="자격증 이름으로 검색 (예: 조리, 전기, 상담)">
     </div>
-    ${others.map(c => certRow(c, c.majors.includes(S.profile.major))).join('')}
-    ${othersAll.length > others.length ? `<div class="footnote">${othersAll.length - others.length}개 더 있어요 — 검색어를 입력해 좁혀 보세요.</div>` : ''}
+    <div id="cert-list-results">${certListResultsHtml()}</div>
 
     <div class="footnote">국가기술자격 등급별 인정 학점: 기술사 45 · 기능장 30 · 기사 20 · 산업기사 16학점 (기능사는 인정 불가).
     전공 연계 자격은 전공필수 학점으로, 연계 없는 자격은 일반선택 학점으로 <b>1개까지만</b> 인정되며, 동일 직무 분야 자격은 1개만, 동일 자격은 전체 학위과정에서 한 번만 인정됩니다.
     표시된 학점·전공 연계는 「제28차 자격 학점인정 기준」 고시(2025.12.15 시행)를 반영한 대표 예시이며, 최종 확인은 학점은행 홈페이지 ‘자격 검색’에서 하세요.</div>`;
 }
 
-function bindCerts() {
-  bindBack();
-  bindPlanItems();
-  const cq = $('#cert-q');
-  if (cq) {
-    cq.onchange = () => { S.ui.certQ = cq.value; save(); render();
-      const el = $('#cert-q'); if (el) { el.focus(); } };
-    cq.onkeydown = e => { if (e.key === 'Enter') cq.onchange(); };
-  }
-  const ap = $('[data-add-plan]');
-  if (ap) ap.onclick = () => planModal(null, { target: 'major' });
+function bindCertListResults() {
   $$('[data-plan-cert]').forEach(b => b.onclick = () => {
     const cert = DATA.certs.find(c => c.name === b.dataset.planCert);
     if (!cert) return;
@@ -2337,6 +2382,26 @@ function bindCerts() {
       target: cert.majors.includes(S.profile.major) ? 'major' : 'general'
     });
   });
+}
+
+function bindCerts() {
+  bindBack();
+  bindPlanItems();
+  bindCertListResults();
+  const cq = $('#cert-q');
+  if (cq) {
+    let searchTimer;
+    cq.oninput = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        S.ui.certQ = cq.value; save();
+        const results = $('#cert-list-results');
+        if (results) { results.innerHTML = certListResultsHtml(); bindCertListResults(); }
+      }, 150);
+    };
+  }
+  const ap = $('[data-add-plan]');
+  if (ap) ap.onclick = () => planModal(null, { target: 'major' });
 }
 
 /* --- 결제 정보 (더보기 메뉴) — 여기 도달했다면 이미 결제 승인된 상태 --- */
@@ -3031,7 +3096,7 @@ function bindData() {
     if (!confirm('정말 모든 데이터를 삭제할까요? 되돌릴 수 없습니다.')) return;
     localStorage.removeItem(STORE_KEY);
     S = defaultState();
-    ob = { phase: 'auth', guideStep: 0, step: 0, degree: 'bachelor', major: '', currentTerm: 'first', earned: { major: 0, liberal: 0, general: 0 }, pending: { major: 0, liberal: 0, general: 0 }, certsUsed: 0, courses: [], plans: [], goalYm: null, certQ: '', dokhakStage: null, dokhakMajor: null };
+    ob = { phase: 'auth', guideStep: 0, step: 0, degree: 'bachelor', major: '', currentTerm: 'first', earned: { major: 0, liberal: 0, general: 0 }, pending: { major: 0, liberal: 0, general: 0 }, certsUsed: 0, courses: [], plans: [], goalYm: null, certQ: '', dokhakStage: null, dokhakMajor: null, showRelated: false, roadmapMode: 'auto' };
     render();
   };
 }
